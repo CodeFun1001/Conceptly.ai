@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models import User, UserBadge, WeakTopic, DailyChallenge, UserNote
 from app.schemas import BadgeResponse, WeakTopicResponse, DailyChallengeResponse, TutorModeUpdate, NoteCreate, NoteResponse, UserResponse
 from app.auth import get_current_user
-from app.services.agent_service import AgentService
+from app.services import notes_generator
 
 router = APIRouter(prefix="/gamification", tags=["gamification"])
 
@@ -209,7 +209,7 @@ def generate_smart_notes(session_id: int, current_user: User = Depends(get_curre
     
     weak_areas = [f"{wt.topic}: {wt.concept}" for wt in weak_topics]
     
-    notes_content = AgentService.generate_smart_notes(session.topic, checkpoint_data, weak_areas)
+    notes_content = notes_generator.generate_comprehensive_notes(session.topic, checkpoint_data, weak_areas)
     
     note = UserNote(
         user_id=current_user.id,
