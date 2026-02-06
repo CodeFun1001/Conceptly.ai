@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { sessionAPI, gamificationAPI } from '../services/api';
-import ProgressBar from '../components/ProgressBar';
+import ProgressBar from '../components/Progressbar';
 
 const Session = () => {
   const { id } = useParams();
