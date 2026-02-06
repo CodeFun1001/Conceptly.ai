@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/Authcontext';
 import { sessionAPI, gamificationAPI } from '../services/api';
 import Sidebar from '../components/Sidebar';
 import BadgeCard from '../components/BadgeCard';
