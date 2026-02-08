@@ -106,3 +106,10 @@ CREATE INDEX idx_badges_user ON user_badges(user_id);
 CREATE INDEX idx_weak_topics_user ON weak_topics(user_id);
 CREATE INDEX idx_challenges_user ON daily_challenges(user_id);
 CREATE INDEX idx_notes_user ON user_notes(user_id);
+
+ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS context TEXT;
+ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS explanation TEXT;
+ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS content_generated BOOLEAN DEFAULT FALSE;
+ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS questions_cache JSON;
+ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS validation_score FLOAT;
+ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS questions_used JSON;
