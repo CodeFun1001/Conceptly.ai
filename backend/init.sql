@@ -1,7 +1,3 @@
-CREATE DATABASE conceptly;
-
-\c conceptly;
-
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -36,7 +32,12 @@ CREATE TABLE checkpoints (
     understanding_score FLOAT,
     attempts INTEGER DEFAULT 0,
     completed_at TIMESTAMP,
-    xp_earned INTEGER DEFAULT 0
+    xp_earned INTEGER DEFAULT 0,
+    context TEXT,
+    explanation TEXT,
+    content_generated BOOLEAN DEFAULT FALSE,
+    questions_cache JSON,
+    validation_score FLOAT
 );
 
 CREATE TABLE quiz_attempts (
@@ -47,6 +48,7 @@ CREATE TABLE quiz_attempts (
     correct_count INTEGER,
     total_questions INTEGER,
     answers JSON,
+    questions_used JSON,
     attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -106,10 +108,3 @@ CREATE INDEX idx_badges_user ON user_badges(user_id);
 CREATE INDEX idx_weak_topics_user ON weak_topics(user_id);
 CREATE INDEX idx_challenges_user ON daily_challenges(user_id);
 CREATE INDEX idx_notes_user ON user_notes(user_id);
-
-ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS context TEXT;
-ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS explanation TEXT;
-ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS content_generated BOOLEAN DEFAULT FALSE;
-ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS questions_cache JSON;
-ALTER TABLE checkpoints ADD COLUMN IF NOT EXISTS validation_score FLOAT;
-ALTER TABLE quiz_attempts ADD COLUMN IF NOT EXISTS questions_used JSON;
