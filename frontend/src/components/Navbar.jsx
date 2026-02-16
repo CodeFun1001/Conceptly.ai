@@ -42,7 +42,7 @@ const Navbar = () => {
   return (
     <>
       <nav className="navbar">
-        <div className="navbar-brand" onClick={handleBrandClick}>
+        <div className="navbar-brand" onClick={handleBrandClick} style={{ cursor: 'pointer' }}>
           <h1>🧠 Conceptly</h1>
           <span className="badge" style={{ 
             background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', 
@@ -64,26 +64,31 @@ const Navbar = () => {
           
           {user && (
             <>
-              <div className="level-badge">
+              <div className="level-badge" style={{ 
+                padding: '6px 14px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                color: 'white',
+                fontWeight: '700',
+                fontSize: '13px',
+                whiteSpace: 'nowrap'
+              }}>
                 Level {user.level}
               </div>
               <span style={{ 
                 color: 'var(--text-secondary)', 
                 marginLeft: '8px',
-                fontWeight: '600'
+                fontWeight: '600',
+                fontSize: '14px',
+                whiteSpace: 'nowrap'
               }}>
                 {user.xp} XP
               </span>
               <button 
-                onClick={() => navigate('/dashboard')} 
-                className="btn btn-secondary"
-              >
-                Dashboard
-              </button>
-              <button 
                 onClick={handleLogout} 
                 className="btn btn-secondary btn-icon"
                 title="Logout"
+                style={{ marginLeft: '12px' }}
               >
                 🔒
               </button>
@@ -109,6 +114,7 @@ const Navbar = () => {
         }}>
           <div className="card card-elevated" style={{
             maxWidth: '400px',
+            width: '90%',
             padding: '32px',
             textAlign: 'center',
             animation: 'fadeIn 0.2s ease'
@@ -120,7 +126,7 @@ const Navbar = () => {
             <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
               Are you sure you want to logout? Your progress is saved!
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button 
                 onClick={() => setShowLogoutModal(false)}
                 className="btn btn-secondary"
