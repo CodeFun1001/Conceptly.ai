@@ -57,6 +57,7 @@ def validate_single_correct(options, correct_answer):
     return False, None
 
 def get_question_signature(checkpoint_id: int, question_text: str) -> str:
+    
     combined = f"{checkpoint_id}_{question_text.lower().strip()}"
     return hashlib.md5(combined.encode()).hexdigest()
 
@@ -79,25 +80,13 @@ def is_question_unique(checkpoint_id: int, question_text: str, session_id: int =
 def clear_question_history(session_id: int = None):
     global _question_history
     if session_id:
+        
         keys_to_remove = [k for k in _question_history.keys() if k.startswith(f"{session_id}_")]
         for key in keys_to_remove:
             del _question_history[key]
     else:
+        
         _question_history.clear()
-
-def calculate_num_questions(level: str, objectives: List[str], key_concepts: List[str]) -> int:
-    num_questions = 4
-    
-    if len(objectives) > 3:
-        num_questions = max(4, len(objectives))
-    
-    if len(key_concepts) > 4:
-        num_questions = max(num_questions, 5)
-    
-    if level == "advanced":
-        num_questions = max(5, num_questions)
-    
-    return min(6, num_questions)
 
 def generate_questions(
     checkpoint: Dict,
@@ -108,23 +97,33 @@ def generate_questions(
     attempt_number: int = 0,
     session_id: int = None
 ) -> List[Dict]:
+    """
+    Generate unique assessment questions for a checkpoint
+    
+    Args:
+        checkpoint: Checkpoint data
+        context: Learning content/context
+        level: Difficulty level
+        tutor_mode: Teaching personality
+        weak_areas: Areas to focus on
+        attempt_number: Retry attempt number
+        session_id: Session ID for better question tracking
+    """
     
     checkpoint_id = checkpoint.get('id', 0)
     
-    print(f"🔍 Generating questions for checkpoint {checkpoint_id}")
+    print(f"📝 Generating questions for checkpoint {checkpoint_id}")
     print(f"   Tutor mode: {tutor_mode}")
     print(f"   Attempt: {attempt_number}")
     if weak_areas:
         print(f"   Focusing on weak areas: {weak_areas}")
     
-    objectives = checkpoint.get('objectives', [])
-    key_concepts = checkpoint.get('key_concepts', [])
-    num_questions = calculate_num_questions(level, objectives, key_concepts)
     
-    print(f"   Generating {num_questions} questions based on topic complexity")
+    num_questions = 3 if level == "beginner" else 4
     
     if attempt_number > 0 and weak_areas:
-        num_questions = max(num_questions, 5)
+        num_questions = min(num_questions + 1, 5)
+    
     
     tutor_personalities = {
         "chill_friend": "Create approachable, conversational questions with friendly tone.",
@@ -138,19 +137,19 @@ def generate_questions(
         tutor_personalities["supportive_buddy"]
     )
     
+    
     weak_focus_instruction = ""
     if weak_areas and attempt_number > 0:
         weak_text = "\n".join(f"  - {area}" for area in weak_areas)
         weak_focus_instruction = f"""
-PRIORITY FOCUS: Create questions specifically targeting these weak areas:
+PRIORITY FOCUS: Create {num_questions - 1} questions specifically targeting these weak areas:
 {weak_text}
 
-Requirements:
-- At least {num_questions - 1} questions must directly test the weak areas
-- Each question tests a DIFFERENT aspect of the weak areas
-- Use varied question styles (conceptual, application, comparison, analysis)
-- All questions MUST be answerable from the provided context
-- Help identify specific gaps in understanding"""
+Each question should:
+- Test a DIFFERENT aspect of the weak areas
+- Use varied question styles (conceptual, application, comparison)
+- Help identify gaps in understanding"""
+    
     
     uniqueness_seed = hashlib.md5(
         f"{checkpoint_id}_{tutor_mode}_{attempt_number}_{session_id}".encode()
@@ -161,20 +160,15 @@ Requirements:
 {personality}
 
 CRITICAL REQUIREMENTS:
-1. Questions MUST be answerable ONLY from the provided content below
+1. Questions MUST be answerable from the provided content
 2. Each question must test a DIFFERENT concept/objective
 3. NO similar or repetitive questions
-4. Exactly 4 unique, realistic options per question
+4. Exactly 4 unique options per question
 5. ONLY ONE correct answer per question
 6. correct_answer must be the EXACT FULL TEXT from options array
 7. NO letters (A/B/C/D) as correct_answer
-8. All incorrect options must be plausible but clearly wrong
-9. NO generic options like "Unrelated concept A/B/C"
-10. Incorrect options should be common misconceptions or related concepts
 
 {weak_focus_instruction}
-
-Generate EXACTLY {num_questions} questions.
 
 Return ONLY a valid JSON array with NO markdown, NO code blocks, NO explanation:
 
@@ -183,7 +177,7 @@ Return ONLY a valid JSON array with NO markdown, NO code blocks, NO explanation:
     "question": "Clear, specific question text?",
     "options": ["Full option 1 text", "Full option 2 text", "Full option 3 text", "Full option 4 text"],
     "correct_answer": "Exact full text of the correct option",
-    "explanation": "Clear explanation of why this answer is correct and why others are wrong",
+    "explanation": "Clear explanation of why this answer is correct",
     "difficulty": "{level}",
     "tested_concept": "Specific concept this question tests"
   }}
@@ -193,14 +187,15 @@ Uniqueness ID: {uniqueness_seed}""")
     
     objectives_text = "\n".join(
         f"  {i+1}. {obj}" 
-        for i, obj in enumerate(objectives)
+        for i, obj in enumerate(checkpoint.get('objectives', []))
     )
     
+    key_concepts = checkpoint.get('key_concepts', [])
     concepts_text = ", ".join(key_concepts) if key_concepts else "Core concepts"
     
-    taught_summary = context[:2500]
+    taught_summary = context[:2000]
     
-    human_msg = HumanMessage(content=f"""Generate {num_questions} UNIQUE, HIGH-QUALITY assessment questions.
+    human_msg = HumanMessage(content=f"""Generate {num_questions} UNIQUE assessment questions.
 
 TOPIC: {checkpoint.get('topic')}
 LEVEL: {level}
@@ -211,7 +206,7 @@ LEARNING OBJECTIVES:
 
 KEY CONCEPTS TO TEST: {concepts_text}
 
-TAUGHT CONTENT (ALL QUESTIONS MUST BE ANSWERABLE FROM THIS):
+TAUGHT CONTENT:
 {taught_summary}
 
 {weak_focus_instruction}
@@ -221,40 +216,25 @@ CRITICAL REMINDERS:
 ✓ Each question tests a DIFFERENT concept from objectives
 ✓ correct_answer = EXACT FULL TEXT from options (not A/B/C/D)
 ✓ NO duplicate or similar questions
-✓ All 4 options must be realistic and plausible
-✓ NO "Unrelated concept A/B/C" options
-✓ Incorrect options should be common misconceptions or related but wrong concepts
-✓ Make options clearly distinct and meaningful
+✓ Make options clearly distinct
 
-Example of GOOD question:
-{{
-  "question": "What is the primary function of mitochondria in a cell?",
-  "options": [
-    "Produce ATP through cellular respiration",
-    "Synthesize proteins from amino acids",
-    "Store genetic information as DNA",
-    "Break down waste materials and toxins"
-  ],
-  "correct_answer": "Produce ATP through cellular respiration",
-  "explanation": "Mitochondria are known as the powerhouse of the cell because they produce ATP through cellular respiration. The other options describe functions of ribosomes, nucleus, and lysosomes respectively.",
-  "difficulty": "intermediate",
-  "tested_concept": "Mitochondrial function"
-}}
-
-Return valid JSON array with {num_questions} questions like the example above.""")
+Return valid JSON array only.""")
     
     try:
         response = llm.invoke([system_msg, human_msg])
         raw = response.content
         
+        
         if isinstance(raw, list):
             raw = " ".join(str(x) for x in raw)
+        
         
         content = str(raw).strip()
         content = re.sub(r'^```json\s*', '', content)
         content = re.sub(r'^```\s*', '', content)
         content = re.sub(r'\s*```$', '', content)
         content = content.strip()
+        
         
         questions = json.loads(content)
         
@@ -264,12 +244,14 @@ Return valid JSON array with {num_questions} questions like the example above.""
         validated = []
         concepts_used = set()
         
-        for q in questions[:num_questions + 3]:
+        for q in questions[:num_questions + 2]:  
             question_text = q.get("question", "").strip()
+            
             
             if not is_question_unique(checkpoint_id, question_text, session_id):
                 print(f"   ⏭️  Skipping duplicate: {question_text[:50]}...")
                 continue
+            
             
             tested_concept = q.get("tested_concept", "").strip()
             if tested_concept in concepts_used:
@@ -282,6 +264,7 @@ Return valid JSON array with {num_questions} questions like the example above.""
                 print(f"   ⚠️  Skipping question with < 4 options")
                 continue
             
+            
             options = options[:4]
             unique_options = deduplicate_options(options)
             
@@ -289,28 +272,9 @@ Return valid JSON array with {num_questions} questions like the example above.""
                 print(f"   ⚠️  Skipping question with duplicate options")
                 continue
             
-            generic_patterns = [
-                r'unrelated concept [a-d]',
-                r'alternative concept [a-d]',
-                r'option [a-d]',
-                r'incorrect answer [a-d]'
-            ]
-            
-            has_generic = False
-            for opt in unique_options:
-                for pattern in generic_patterns:
-                    if re.search(pattern, opt.lower()):
-                        has_generic = True
-                        break
-                if has_generic:
-                    break
-            
-            if has_generic:
-                print(f"   ⚠️  Skipping question with generic options")
-                continue
-            
             options = unique_options[:4]
             correct = q.get("correct_answer", "").strip()
+            
             
             if correct.strip().upper() in ['A', 'B', 'C', 'D']:
                 letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
@@ -320,11 +284,13 @@ Return valid JSON array with {num_questions} questions like the example above.""
                 else:
                     correct = options[0]
             
+            
             is_valid, matched = validate_single_correct(options, correct)
             
             if not is_valid:
                 print(f"   ⚠️  Correcting ambiguous correct answer")
                 matched = options[0]
+            
             
             validated_q = {
                 "type": "mcq",
@@ -340,86 +306,68 @@ Return valid JSON array with {num_questions} questions like the example above.""
             validated.append(validated_q)
             concepts_used.add(tested_concept)
             
+            
             if len(validated) >= num_questions:
                 break
         
         if len(validated) >= num_questions:
-            print(f"✅ Successfully generated {len(validated)} unique questions")
+            print(f"✓ Successfully generated {len(validated)} unique questions")
             return validated[:num_questions]
         else:
             print(f"⚠️  Warning: Only generated {len(validated)} questions, needed {num_questions}")
             
             while len(validated) < num_questions:
-                fallback = create_smart_fallback_mcq(
-                    checkpoint, 
+                validated.extend(create_default_mcq(
+                    checkpoint.get('topic', 'Learning'), 
                     num_questions - len(validated), 
                     level,
-                    weak_areas,
-                    context[:1000]
-                )
-                validated.extend(fallback)
+                    weak_areas
+                ))
             return validated[:num_questions]
     
     except Exception as e:
         print(f"❌ Question generation error: {e}")
         import traceback
         traceback.print_exc()
-        return create_smart_fallback_mcq(
-            checkpoint, 
+        return create_default_mcq(
+            checkpoint.get('topic', 'Learning'), 
             num_questions, 
             level,
-            weak_areas,
-            context[:1000]
+            weak_areas
         )
 
-def create_smart_fallback_mcq(checkpoint: Dict, num: int, level: str, weak_areas: List[str] = None, context: str = ""):
-
-    print(f"🔧 Creating {num} fallback questions for {checkpoint.get('topic')}")
+def create_default_mcq(topic: str, num: int, level: str = "intermediate", weak_areas: List[str] = None):
+    print(f"📝 Creating {num} fallback questions for {topic}")
     
-    topic = checkpoint.get('topic', 'Learning')
-    objectives = checkpoint.get('objectives', [])
-    key_concepts = checkpoint.get('key_concepts', [])
+    if weak_areas and len(weak_areas) > 0:
+        return [{
+            "type": "mcq",
+            "question": f"What is the key principle related to {weak_areas[i % len(weak_areas)]}?",
+            "options": [
+                f"Core understanding of {weak_areas[i % len(weak_areas)]}",
+                "Alternative concept A",
+                "Alternative concept B",
+                "Alternative concept C"
+            ],
+            "correct_answer": f"Core understanding of {weak_areas[i % len(weak_areas)]}",
+            "explanation": "This directly addresses the core concept of the weak area.",
+            "difficulty": level,
+            "key_points": [weak_areas[i % len(weak_areas)]],
+            "tested_concept": weak_areas[i % len(weak_areas)]
+        } for i in range(num)]
     
-    questions = []
-    
-    concepts_to_test = weak_areas if weak_areas else key_concepts[:num]
-    
-    if not concepts_to_test:
-        concepts_to_test = objectives[:num]
-    
-    for i in range(num):
-        if i < len(concepts_to_test):
-            concept = concepts_to_test[i]
-            questions.append({
-                "type": "mcq",
-                "question": f"What is the key principle related to {concept} in {topic}?",
-                "options": [
-                    f"Understanding {concept} requires applying {topic} fundamentals",
-                    f"{concept} is unrelated to {topic} principles",
-                    f"{concept} contradicts the basic concepts of {topic}",
-                    f"{concept} can only be understood without reference to {topic}"
-                ],
-                "correct_answer": f"Understanding {concept} requires applying {topic} fundamentals",
-                "explanation": f"This directly addresses the relationship between {concept} and {topic}, which is a core learning objective.",
-                "difficulty": level,
-                "key_points": [concept],
-                "tested_concept": concept
-            })
-        else:
-            questions.append({
-                "type": "mcq",
-                "question": f"Which statement best describes a fundamental principle of {topic}?",
-                "options": [
-                    f"{topic} builds on foundational concepts that connect its various aspects",
-                    f"{topic} has no underlying principles connecting its components",
-                    f"{topic} concepts work independently without any relationship",
-                    f"{topic} cannot be understood through systematic study"
-                ],
-                "correct_answer": f"{topic} builds on foundational concepts that connect its various aspects",
-                "explanation": f"Understanding {topic} requires recognizing how its fundamental principles connect different concepts.",
-                "difficulty": level,
-                "key_points": ["Fundamentals"],
-                "tested_concept": "Core understanding"
-            })
-    
-    return questions
+    return [{
+        "type": "mcq",
+        "question": f"What is a fundamental principle of {topic}?",
+        "options": [
+            f"Core principle of {topic}",
+            "Unrelated concept A",
+            "Unrelated concept B",
+            "Unrelated concept C"
+        ],
+        "correct_answer": f"Core principle of {topic}",
+        "explanation": "This represents the fundamental understanding of the topic.",
+        "difficulty": level,
+        "key_points": ["Fundamentals"],
+        "tested_concept": "Core understanding"
+    } for _ in range(num)]

@@ -9,18 +9,9 @@ const Feynman = () => {
   const [weakAreas, setWeakAreas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
-  const [generatingRetry, setGeneratingRetry] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
     loadFeynmanExplanation();
-    
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, [attempt]);
 
   const loadFeynmanExplanation = async () => {
@@ -31,25 +22,13 @@ const Feynman = () => {
       setWeakAreas(response.data.weak_areas);
     } catch (error) {
       console.error('Failed to load Feynman explanation:', error);
-      setExplanation('Failed to load explanation. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRetryQuiz = async () => {
-    setGeneratingRetry(true);
-    try {
-      // Generate new quiz based on weak areas
-      await checkpointAPI.retryQuiz(checkpointId);
-      navigate(`/quiz/${sessionId}/${checkpointId}`);
-    } catch (error) {
-      console.error('Failed to generate retry quiz:', error);
-      // Fallback to regular quiz
-      navigate(`/quiz/${sessionId}/${checkpointId}`);
-    } finally {
-      setGeneratingRetry(false);
-    }
+  const handleTryAgain = () => {
+    navigate(`/quiz/${sessionId}/${checkpointId}`);
   };
 
   const handleDifferentApproach = () => {
@@ -58,27 +37,6 @@ const Feynman = () => {
 
   const handleBackToSession = () => {
     navigate(`/session/${sessionId}`);
-  };
-
-  const formatMarkdown = (text) => {
-    if (!text) return '';
-    
-    text = text.replace(/^### (.+)$/gm, '<h3 style="color: var(--primary); margin-top: 24px; margin-bottom: 12px; font-size: ' + (isMobile ? '18px' : '20px') + ';">$1</h3>');
-    text = text.replace(/^## (.+)$/gm, '<h2 style="color: var(--primary); margin-top: 28px; margin-bottom: 14px; font-size: ' + (isMobile ? '20px' : '24px') + ';">$1</h2>');
-    text = text.replace(/^# (.+)$/gm, '<h1 style="color: var(--primary); margin-top: 32px; margin-bottom: 16px; font-size: ' + (isMobile ? '24px' : '28px') + ';">$1</h1>');
-    
-    text = text.replace(/\*\*(.+?)\*\*/g, '<strong style="color: var(--primary); font-weight: 700;">$1</strong>');
-    text = text.replace(/^[•\-\*] (.+)$/gm, '<li style="margin-left: 24px; margin-bottom: 8px; line-height: 1.6;">$1</li>');
-    text = text.replace(/(<li[^>]*>.*<\/li>\s*)+/g, '<ul style="margin: 16px 0; padding-left: 0;">$&</ul>');
-    
-    text = text.split('\n\n').map(para => {
-      if (para.trim() && !para.includes('<h') && !para.includes('<ul') && !para.includes('<li')) {
-        return `<p style="margin-bottom: 16px; line-height: 1.7; color: var(--text-primary);">${para}</p>`;
-      }
-      return para;
-    }).join('\n');
-    
-    return text;
   };
 
   if (loading) {
@@ -91,27 +49,21 @@ const Feynman = () => {
   }
 
   return (
-    <div className="container" style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '24px' }}>
+    <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div 
         className="card card-elevated fade-in" 
         style={{ 
           background: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
           color: 'white',
           marginBottom: '24px',
-          border: 'none',
-          padding: isMobile ? '20px' : '32px'
+          border: 'none'
         }}
       >
-        <div style={{ fontSize: isMobile ? '48px' : '64px', marginBottom: '16px' }}>💡</div>
-        <h1 style={{ margin: '0 0 12px 0', fontSize: isMobile ? '22px' : '28px' }}>Simplified Explanation</h1>
-        <p style={{ margin: 0, opacity: 0.95, fontSize: isMobile ? '14px' : '16px' }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>💡</div>
+        <h1 style={{ margin: '0 0 12px 0' }}>Simplified Explanation</h1>
+        <p style={{ margin: 0, opacity: 0.95, fontSize: '16px' }}>
           Let's break this down in a simpler way
         </p>
-        {attempt > 0 && (
-          <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: isMobile ? '13px' : '14px' }}>
-            Attempt {attempt + 1} - Using a different teaching approach
-          </p>
-        )}
       </div>
 
       {weakAreas.length > 0 && (
@@ -119,22 +71,18 @@ const Feynman = () => {
           marginBottom: '24px',
           animationDelay: '0.1s',
           background: 'linear-gradient(to right, rgba(139, 92, 246, 0.1), rgba(167, 139, 250, 0.1))',
-          borderLeft: '4px solid var(--primary)',
-          padding: isMobile ? '16px' : '20px'
+          borderLeft: '4px solid var(--primary)'
         }}>
-          <h3 style={{ marginBottom: '16px', color: 'var(--primary)', fontSize: isMobile ? '16px' : '18px' }}>
-            📚 Focus Areas
-          </h3>
-          <p style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontSize: isMobile ? '13px' : '14px' }}>
+          <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>📚 Focus Areas</h3>
+          <p style={{ marginBottom: '12px', color: 'var(--text-secondary)' }}>
             We'll pay special attention to these concepts:
           </p>
-          <ul style={{ marginBottom: 0, paddingLeft: isMobile ? '20px' : '24px' }}>
+          <ul style={{ marginBottom: 0, paddingLeft: '24px' }}>
             {weakAreas.map((area, idx) => (
               <li key={idx} style={{ 
                 marginBottom: '8px', 
                 color: 'var(--text-primary)',
-                fontSize: isMobile ? '14px' : '15px',
-                lineHeight: '1.6'
+                fontSize: '15px'
               }}>
                 {area}
               </li>
@@ -145,27 +93,26 @@ const Feynman = () => {
 
       <div className="card fade-in" style={{ 
         marginBottom: '24px',
-        animationDelay: '0.2s',
-        padding: isMobile ? '20px' : '24px'
+        animationDelay: '0.2s'
       }}>
-        <div 
-          style={{ 
-            fontSize: isMobile ? '14px' : '15px',
-            lineHeight: '1.8',
-            color: 'var(--text-primary)',
-            maxWidth: '100%',
-            wordWrap: 'break-word',
-            overflowWrap: 'break-word'
-          }}
-          dangerouslySetInnerHTML={{ __html: formatMarkdown(explanation) }}
-        />
+        <div style={{ 
+          fontSize: '15px', 
+          lineHeight: '1.8',
+          color: 'var(--text-primary)',
+          whiteSpace: 'pre-wrap'
+        }}>
+          {explanation.split('\n\n').map((paragraph, idx) => (
+            <p key={idx} style={{ marginBottom: '20px' }}>
+              {paragraph}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="card fade-in" style={{ 
-        animationDelay: '0.3s',
-        padding: isMobile ? '20px' : '24px'
+        animationDelay: '0.3s'
       }}>
-        <h3 style={{ marginBottom: '20px', color: 'var(--primary)', fontSize: isMobile ? '18px' : '20px' }}>
+        <h3 style={{ marginBottom: '20px', color: 'var(--primary)' }}>
           What would you like to do next?
         </h3>
         
@@ -175,17 +122,16 @@ const Feynman = () => {
           gap: '12px'
         }}>
           <button 
-            onClick={handleRetryQuiz}
-            disabled={generatingRetry}
+            onClick={handleTryAgain}
             className="btn btn-primary"
             style={{ 
               width: '100%', 
-              fontSize: isMobile ? '14px' : '16px',
-              padding: isMobile ? '14px' : '16px',
+              fontSize: '16px', 
+              padding: '16px',
               justifyContent: 'center'
             }}
           >
-            {generatingRetry ? '⏳ Preparing Quiz...' : '🎯 Try Quiz Again (Focused on Weak Areas)'}
+            🎯 Try the Quiz Again
           </button>
           
           <button 
@@ -193,8 +139,8 @@ const Feynman = () => {
             className="btn btn-secondary"
             style={{ 
               width: '100%', 
-              fontSize: isMobile ? '14px' : '16px',
-              padding: isMobile ? '14px' : '16px',
+              fontSize: '16px', 
+              padding: '16px',
               justifyContent: 'center'
             }}
           >
@@ -206,8 +152,8 @@ const Feynman = () => {
             className="btn btn-secondary"
             style={{ 
               width: '100%', 
-              fontSize: isMobile ? '14px' : '16px',
-              padding: isMobile ? '14px' : '16px',
+              fontSize: '16px', 
+              padding: '16px',
               justifyContent: 'center'
             }}
           >
@@ -220,22 +166,20 @@ const Feynman = () => {
         marginTop: '24px',
         animationDelay: '0.4s',
         background: 'rgba(139, 92, 246, 0.05)',
-        borderLeft: '4px solid var(--primary)',
-        padding: isMobile ? '16px' : '20px'
+        borderLeft: '4px solid var(--primary)'
       }}>
-        <h4 style={{ marginBottom: '12px', color: 'var(--primary)', fontSize: isMobile ? '16px' : '18px' }}>
+        <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>
           💭 Learning Tip
         </h4>
         <p style={{ 
           margin: 0, 
           color: 'var(--text-secondary)',
-          fontSize: isMobile ? '13px' : '15px',
+          fontSize: '15px',
           lineHeight: '1.6'
         }}>
           The Feynman Technique is about explaining concepts in simple terms. 
           If you can explain it simply, you truly understand it. Take your time 
-          to absorb this explanation, and when you're ready, try the quiz again! 
-          The new quiz will focus specifically on the areas where you struggled.
+          to absorb this explanation, and when you're ready, try the quiz again!
         </p>
       </div>
     </div>

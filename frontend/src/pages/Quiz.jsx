@@ -2,36 +2,92 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { sessionAPI, checkpointAPI } from '../services/api';
 
+const triggerConfetti = () => {
+  const duration = 3 * 1000;
+  const animationEnd = Date.now() + duration;
+
+  function randomInRange(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  const interval = setInterval(function() {
+    const timeLeft = animationEnd - Date.now();
+
+    if (timeLeft <= 0) {
+      return clearInterval(interval);
+    }
+
+    const particleCount = 50 * (timeLeft / duration);
+    
+    for (let i = 0; i < particleCount; i++) {
+      createConfettiParticle(
+        Math.random() * window.innerWidth,
+        Math.random() * window.innerHeight / 3
+      );
+    }
+  }, 250);
+};
+
+const createConfettiParticle = (x, y) => {
+  const particle = document.createElement('div');
+  particle.style.cssText = `
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    background: ${['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'][Math.floor(Math.random() * 5)]};
+    left: ${x}px;
+    top: ${y}px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 10000;
+    animation: confetti-fall ${2 + Math.random() * 2}s ease-out forwards;
+  `;
+  
+  document.body.appendChild(particle);
+  
+  setTimeout(() => {
+    particle.remove();
+  }, 4000);
+};
+
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes confetti-fall {
+      to {
+        transform: translateY(${window.innerHeight}px) rotate(${360 * 2}deg);
+        opacity: 0;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 const Quiz = () => {
   const { sessionId, checkpointId } = useParams();
   const navigate = useNavigate();
   const [questions, setQuestions] = useState([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [checkpoint, setCheckpoint] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [result, setResult] = useState(null);
 
   useEffect(() => {
     loadQuestions();
-    
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (result && result.passed) {
+      triggerConfetti();
+    }
+  }, [result]);
 
   const loadQuestions = async () => {
     try {
-      const checkpointsRes = await sessionAPI.getCheckpoints(sessionId);
-      const currentCheckpoint = checkpointsRes.data.find(cp => cp.id === parseInt(checkpointId));
-      setCheckpoint(currentCheckpoint);
-
-      const questionsRes = await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
-      setQuestions(questionsRes.data.questions);
-      setAnswers(new Array(questionsRes.data.questions.length).fill(''));
+      const response = await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
+      setQuestions(response.data.questions);
+      setAnswers(new Array(response.data.questions.length).fill(''));
     } catch (error) {
       console.error('Failed to load questions:', error);
     } finally {
@@ -39,46 +95,48 @@ const Quiz = () => {
     }
   };
 
-  const handleAnswerChange = (index, value) => {
+  const handleAnswerSelect = (answer) => {
     const newAnswers = [...answers];
-    newAnswers[index] = value;
+    newAnswers[currentQuestion] = answer;
     setAnswers(newAnswers);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    const unanswered = answers.some(ans => !ans || ans.trim() === '');
-    if (unanswered) {
+  const handleNext = () => {
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (answers.some(a => !a)) {
       alert('Please answer all questions before submitting');
       return;
     }
 
     setSubmitting(true);
     try {
-      const result = await checkpointAPI.submitQuiz(checkpointId, answers);
-      
-      if (result.data.passed) {
-        alert(`✅ Congratulations! You passed with ${(result.data.score * 100).toFixed(0)}%\n\nXP Earned: +${result.data.xp_earned}`);
-        await sessionAPI.completeCheckpoint(sessionId, checkpointId);
-        navigate(`/session/${sessionId}`);
-      } else {
-        const retry = window.confirm(
-          `You scored ${(result.data.score * 100).toFixed(0)}%\n\n` +
-          `Correct: ${result.data.correct_count}/${result.data.total_questions}\n\n` +
-          `Would you like a simplified explanation to help you understand better?`
-        );
-        
-        if (retry) {
-          navigate(`/feynman/${sessionId}/${checkpointId}`);
-        }
-      }
+      const response = await checkpointAPI.submitQuiz(checkpointId, answers);
+      setResult(response.data);
     } catch (error) {
       console.error('Failed to submit quiz:', error);
       alert('Failed to submit quiz. Please try again.');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleFeynman = () => {
+    navigate(`/feynman/${sessionId}/${checkpointId}`);
+  };
+
+  const handleContinue = () => {
+    navigate(`/session/${sessionId}`);
   };
 
   if (loading) {
@@ -90,207 +148,318 @@ const Quiz = () => {
     );
   }
 
-  const answeredCount = answers.filter(ans => ans && ans.trim() !== '').length;
-  const progressPercentage = questions.length > 0 
-    ? (answeredCount / questions.length * 100) 
-    : 0;
+  if (result) {
+    const passed = result.passed;
+    const percentage = (result.score * 100).toFixed(0);
+
+    return (
+      <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <div 
+          className="card card-elevated fade-in" 
+          style={{ 
+            background: passed 
+              ? 'linear-gradient(135deg, #10B981 0%, #34D399 100%)' 
+              : 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+            color: 'white',
+            textAlign: 'center',
+            padding: '48px 32px',
+            marginBottom: '24px',
+            border: 'none'
+          }}
+        >
+          <div style={{ fontSize: '72px', marginBottom: '16px', animation: 'bounce 1s ease' }}>
+            {passed ? '🎉' : '📚'}
+          </div>
+          <h1 style={{ margin: '0 0 16px 0' }}>
+            {passed ? 'Checkpoint Passed!' : 'Keep Learning!'}
+          </h1>
+          <p style={{ fontSize: '56px', fontWeight: '800', margin: '16px 0' }}>
+            {percentage}%
+          </p>
+          <p style={{ margin: 0, fontSize: '20px', opacity: 0.95 }}>
+            {result.correct_count}/{result.total_questions} Correct
+          </p>
+          {result.xp_earned > 0 && (
+            <div style={{ 
+              marginTop: '20px', 
+              padding: '12px 24px', 
+              background: 'rgba(255, 255, 255, 0.2)', 
+              borderRadius: 'var(--radius)',
+              display: 'inline-block'
+            }}>
+              <span style={{ fontSize: '18px', fontWeight: '700' }}>+{result.xp_earned} XP Earned! 🌟</span>
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <h3 style={{ marginBottom: '20px', color: 'var(--primary)' }}>📋 Detailed Results</h3>
+          {result.detailed_results.map((detail, idx) => (
+            <div 
+              key={idx}
+              className="quiz-question fade-in"
+              style={{ 
+                borderLeftColor: detail.is_correct ? 'var(--success)' : 'var(--error)',
+                background: detail.is_correct ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                marginBottom: '20px',
+                animationDelay: `${idx * 0.1}s`
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>Question {idx + 1}</h4>
+                <span style={{ fontSize: '28px' }}>
+                  {detail.is_correct ? '✅' : '❌'}
+                </span>
+              </div>
+              
+              <p style={{ marginBottom: '16px', fontWeight: '500', fontSize: '16px' }}>
+                {detail.question}
+              </p>
+              
+              <div style={{ 
+                background: 'var(--surface)', 
+                borderRadius: 'var(--radius)', 
+                padding: '16px', 
+                marginBottom: '12px',
+                border: '2px solid var(--border)'
+              }}>
+                <strong style={{ color: 'var(--text-secondary)' }}>Your Answer:</strong>
+                <div style={{ 
+                  background: detail.is_correct ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-sm)',
+                  marginTop: '8px',
+                  color: detail.is_correct ? 'var(--success)' : 'var(--error)',
+                  fontWeight: '600'
+                }}>
+                  {detail.user_answer}
+                </div>
+              </div>
+              
+              {!detail.is_correct && (
+                <div style={{ 
+                  background: 'var(--surface)', 
+                  borderRadius: 'var(--radius)', 
+                  padding: '16px', 
+                  marginBottom: '12px',
+                  border: '2px solid var(--border)'
+                }}>
+                  <strong style={{ color: 'var(--text-secondary)' }}>Correct Answer:</strong>
+                  <div style={{ 
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    padding: '12px',
+                    borderRadius: 'var(--radius-sm)',
+                    marginTop: '8px',
+                    color: 'var(--success)',
+                    fontWeight: '600'
+                  }}>
+                    {detail.correct_answer}
+                  </div>
+                </div>
+              )}
+              
+              <div style={{ 
+                background: 'var(--surface-elevated)', 
+                borderRadius: 'var(--radius)', 
+                padding: '16px',
+                border: '1px solid var(--border)'
+              }}>
+                <strong>💡 Explanation:</strong>
+                <p style={{ marginTop: '8px', marginBottom: 0, color: 'var(--text-secondary)' }}>
+                  {detail.explanation}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card" style={{ textAlign: 'center' }}>
+          {passed ? (
+            <button 
+              onClick={handleContinue}
+              className="btn btn-primary"
+              style={{ fontSize: '16px', padding: '16px 40px' }}
+            >
+              ➡️ Continue to Next Checkpoint
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                onClick={handleFeynman}
+                className="btn btn-primary"
+                style={{ fontSize: '16px', padding: '16px 32px' }}
+              >
+                💡 Get Simplified Explanation
+              </button>
+              <button 
+                onClick={() => navigate(`/session/${sessionId}`)}
+                className="btn btn-secondary"
+                style={{ fontSize: '16px', padding: '16px 32px' }}
+              >
+                📖 Review Content
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const question = questions[currentQuestion];
+  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  const answeredCount = answers.filter(a => a).length;
 
   return (
-    <div className="container" style={{ maxWidth: '900px', margin: '0 auto', padding: isMobile ? '12px' : '24px' }}>
-      <div 
-        className="card card-elevated fade-in" 
-        style={{ 
-          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-          color: 'white',
-          marginBottom: '24px',
-          border: 'none',
-          padding: isMobile ? '20px' : '32px'
-        }}
-      >
-        <h1 style={{ margin: '0 0 12px 0', fontSize: isMobile ? '22px' : '28px' }}>
-          📝 Quiz: {checkpoint?.topic}
-        </h1>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: isMobile ? '13px' : '14px' }}>
-            <span>Progress: {answeredCount}/{questions.length} answered</span>
-            <span>{progressPercentage.toFixed(0)}%</span>
-          </div>
-          <div className="progress-bar" style={{ height: '8px', background: 'rgba(255, 255, 255, 0.3)' }}>
-            <div 
-              className="progress-fill" 
-              style={{ 
-                width: `${progressPercentage}%`,
-                background: 'linear-gradient(90deg, #FBBF24, #F59E0B)'
-              }}
-            ></div>
-          </div>
-        </div>
-        <p style={{ margin: 0, opacity: 0.95, fontSize: isMobile ? '13px' : '14px' }}>
-          Pass threshold: 75% • Questions: {questions.length}
+    <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div className="card card-elevated" style={{ 
+        background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', 
+        color: 'white', 
+        marginBottom: '24px',
+        border: 'none'
+      }}>
+        <h1 style={{ margin: '0 0 8px 0' }}>🎯 Knowledge Check</h1>
+        <p style={{ margin: 0, opacity: 0.9, fontSize: '16px' }}>
+          Test your understanding of the concepts you've learned
         </p>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        {questions.map((question, index) => (
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+          <span style={{ fontWeight: '600', fontSize: '15px' }}>
+            Question {currentQuestion + 1} of {questions.length}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              {answeredCount}/{questions.length} answered
+            </span>
+            <span style={{ color: 'var(--primary)', fontWeight: '700', fontSize: '18px' }}>
+              {Math.round((answeredCount / questions.length) * 100)}%
+            </span>
+          </div>
+        </div>
+        <div className="progress-bar" style={{ height: '8px', borderRadius: '4px' }}>
           <div 
-            key={index} 
-            className="card fade-in" 
+            className="progress-fill" 
             style={{ 
-              marginBottom: '24px',
-              animationDelay: `${index * 0.05}s`,
-              padding: isMobile ? '20px' : '24px'
+              width: `${(answeredCount / questions.length) * 100}%`,
+              transition: 'width 0.3s ease'
             }}
-          >
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'flex-start', 
-              gap: '12px', 
-              marginBottom: '16px',
-              flexWrap: isMobile ? 'wrap' : 'nowrap'
-            }}>
-              <span style={{ 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: '700',
-                color: 'var(--primary)',
-                background: 'var(--surface-elevated)',
-                padding: '8px 14px',
-                borderRadius: '50%',
-                minWidth: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {index + 1}
-              </span>
-              <h3 style={{ 
-                margin: 0, 
-                fontSize: isMobile ? '15px' : '16px',
-                lineHeight: '1.6',
-                color: 'var(--text-primary)',
-                flex: 1,
-                wordWrap: 'break-word'
-              }}>
-                {question.question}
-              </h3>
-            </div>
+          ></div>
+        </div>
+      </div>
 
-            {question.tested_concept && (
-              <div style={{ 
-                marginBottom: '16px',
-                padding: '8px 12px',
-                background: 'var(--surface-elevated)',
-                borderRadius: 'var(--radius)',
-                fontSize: isMobile ? '12px' : '13px',
-                color: 'var(--text-secondary)',
-                display: 'inline-block'
-              }}>
-                🎯 Testing: {question.tested_concept}
-              </div>
-            )}
+      <div className="quiz-question" style={{ minHeight: '400px' }}>
+        <p style={{ 
+          fontSize: '20px', 
+          lineHeight: '1.7', 
+          marginBottom: '32px', 
+          fontWeight: '500',
+          color: 'var(--text-primary)'
+        }}>
+          {question.question}
+        </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {question.options.map((option, optIndex) => (
-                <label 
-                  key={optIndex}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '12px',
-                    padding: isMobile ? '14px' : '16px',
-                    background: answers[index] === option 
-                      ? 'var(--surface-elevated)' 
-                      : 'var(--background)',
-                    border: `2px solid ${answers[index] === option 
-                      ? 'var(--primary)' 
-                      : 'var(--border)'}`,
-                    borderRadius: 'var(--radius)',
-                    cursor: 'pointer',
+        <div className="quiz-options">
+          {question.options.map((option, idx) => {
+            const isSelected = answers[currentQuestion] === option;
+            return (
+              <div
+                key={idx}
+                className={`quiz-option ${isSelected ? 'selected' : ''}`}
+                onClick={() => handleAnswerSelect(option)}
+                style={{
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  transform: isSelected ? 'translateX(4px)' : 'translateX(0)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
+                    background: isSelected ? 'var(--primary)' : 'transparent',
+                    flexShrink: 0,
                     transition: 'all 0.2s ease',
-                    fontSize: isMobile ? '14px' : '15px',
-                    lineHeight: '1.5',
-                    wordWrap: 'break-word'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (answers[index] !== option) {
-                      e.currentTarget.style.background = 'var(--surface-elevated)';
-                      e.currentTarget.style.borderColor = 'var(--text-secondary)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (answers[index] !== option) {
-                      e.currentTarget.style.background = 'var(--background)';
-                      e.currentTarget.style.borderColor = 'var(--border)';
-                    }
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name={`question-${index}`}
-                    value={option}
-                    checked={answers[index] === option}
-                    onChange={(e) => handleAnswerChange(index, e.target.value)}
-                    style={{ 
-                      marginTop: '4px',
-                      cursor: 'pointer',
-                      minWidth: '18px',
-                      minHeight: '18px'
-                    }}
-                  />
-                  <span style={{ flex: 1, color: 'var(--text-primary)' }}>
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {isSelected && (
+                      <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: 'white'
+                      }}></div>
+                    )}
+                  </div>
+                  <span style={{ 
+                    flex: 1, 
+                    fontSize: '16px',
+                    fontWeight: isSelected ? '600' : '400'
+                  }}>
                     {option}
                   </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-        <div className="card" style={{ padding: isMobile ? '20px' : '24px' }}>
-          <div style={{ 
-            display: 'flex', 
-            gap: '12px',
-            flexDirection: isMobile ? 'column' : 'row'
-          }}>
-            <button
-              type="button"
-              onClick={() => navigate(`/session/${sessionId}`)}
-              className="btn btn-secondary"
-              style={{ 
-                flex: isMobile ? 'none' : 1,
-                fontSize: isMobile ? '14px' : '16px',
-                padding: isMobile ? '12px' : '14px'
-              }}
-            >
-              ← Back to Session
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || answeredCount < questions.length}
-              className="btn btn-primary"
-              style={{ 
-                flex: isMobile ? 'none' : 2,
-                fontSize: isMobile ? '14px' : '16px',
-                padding: isMobile ? '12px' : '14px'
-              }}
-            >
-              {submitting ? 'Submitting...' : `Submit Quiz (${answeredCount}/${questions.length})`}
-            </button>
-          </div>
-          
-          {answeredCount < questions.length && (
-            <p style={{ 
-              textAlign: 'center', 
-              color: 'var(--warning)', 
-              marginTop: '16px',
-              marginBottom: 0,
-              fontSize: isMobile ? '13px' : '14px'
-            }}>
-              ⚠️ Please answer all questions before submitting
-            </p>
+      <div className="card" style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        flexWrap: 'wrap', 
+        gap: '16px',
+        marginTop: '24px'
+      }}>
+        <button 
+          onClick={handlePrevious}
+          className="btn btn-secondary"
+          disabled={currentQuestion === 0}
+          style={{ minWidth: '120px', opacity: currentQuestion === 0 ? 0.5 : 1 }}
+        >
+          ⬅️ Previous
+        </button>
+
+        <div style={{ textAlign: 'center' }}>
+          {answers[currentQuestion] ? (
+            <span style={{ color: 'var(--success)', fontWeight: '600', fontSize: '16px' }}>
+              ✅ Answered
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-tertiary)', fontSize: '16px' }}>
+              Select an answer
+            </span>
           )}
         </div>
-      </form>
+
+        {currentQuestion < questions.length - 1 ? (
+          <button 
+            onClick={handleNext}
+            className="btn btn-primary"
+            style={{ minWidth: '120px' }}
+          >
+            Next ➡️
+          </button>
+        ) : (
+          <button 
+            onClick={handleSubmit}
+            className="btn btn-primary"
+            disabled={submitting || answeredCount < questions.length}
+            style={{ 
+              minWidth: '150px',
+              opacity: (submitting || answeredCount < questions.length) ? 0.6 : 1
+            }}
+          >
+            {submitting ? 'Submitting...' : '📊 Submit Quiz'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

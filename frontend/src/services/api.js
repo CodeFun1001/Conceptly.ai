@@ -57,14 +57,12 @@ export const sessionAPI = {
   getCheckpointContent: (sessionId, checkpointId) => api.get(`/sessions/${sessionId}/checkpoints/${checkpointId}/content`),
   getCheckpointQuestions: (sessionId, checkpointId) => api.get(`/sessions/${sessionId}/checkpoints/${checkpointId}/questions`),
   completeCheckpoint: (sessionId, checkpointId) => api.post(`/sessions/${sessionId}/checkpoints/${checkpointId}/complete`),
-  completeSession: (id) => api.post(`/sessions/${id}/complete`),
-  canCompleteSession: (id) => api.get(`/sessions/${id}/can-complete`)
+  completeSession: (id) => api.post(`/sessions/${id}/complete`)
 };
 
 export const checkpointAPI = {
   submitQuiz: (checkpointId, answers) => api.post(`/checkpoints/${checkpointId}/submit`, { answers }),
-  getFeynman: (checkpointId, attempt = 0) => api.get(`/checkpoints/${checkpointId}/feynman?attempt=${attempt}`),
-  retryQuiz: (checkpointId) => api.post(`/checkpoints/${checkpointId}/retry-quiz`)
+  getFeynman: (checkpointId, attempt = 0) => api.get(`/checkpoints/${checkpointId}/feynman?attempt=${attempt}`)
 };
 
 export const analyticsAPI = {
