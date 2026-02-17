@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { sessionAPI, gamificationAPI } from '../services/api';
 import ProgressBar from '../components/Progressbar';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const Session = () => {
   const { id } = useParams();
@@ -231,7 +233,6 @@ const Session = () => {
     return mnemonics;
   };
 
-  
   const renderFormattedText = (text) => {
     if (!text) return null;
 
@@ -661,7 +662,9 @@ const Session = () => {
 
                   {displayedText && (
                     <div style={{ color: 'var(--text-primary)', fontSize: '15px' }}>
-                      {renderFormattedText(displayedText)}
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {displayedText}
+                      </ReactMarkdown>
                     </div>
                   )}
 
