@@ -72,7 +72,6 @@ DAILY_CHALLENGES = [
 
 
 def update_streak(user: User, db: Session):
-    """Update user daily streak. Call on any meaningful activity."""
     analytics = db.query(UserAnalytics).filter(UserAnalytics.user_id == user.id).first()
     if not analytics:
         analytics = UserAnalytics(user_id=user.id)
@@ -83,7 +82,7 @@ def update_streak(user: User, db: Session):
     last_study = analytics.last_study_date.date() if analytics.last_study_date else None
 
     if last_study == today:
-        return 
+        return
 
     if last_study == today - timedelta(days=1):
         analytics.current_streak += 1
@@ -216,10 +215,20 @@ def check_and_award_badges(current_user: User = Depends(get_current_user), db: S
 
 @router.get("/weak-topics", response_model=List[WeakTopicResponse])
 def get_weak_topics(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    weak_topics = db.query(WeakTopic).filter(
+    all_weak = db.query(WeakTopic).filter(
         WeakTopic.user_id == current_user.id
-    ).order_by(WeakTopic.strength_score.asc()).limit(5).all()
-    return weak_topics
+    ).order_by(WeakTopic.last_practiced.desc()).all()
+
+    seen = set()
+    unique_weak = []
+    for wt in all_weak:
+        key = (wt.topic.strip().lower(), wt.concept.strip().lower())
+        if key not in seen:
+            seen.add(key)
+            unique_weak.append(wt)
+
+    unique_weak.sort(key=lambda w: w.strength_score)
+    return unique_weak[:5]
 
 
 @router.get("/daily-challenge", response_model=DailyChallengeResponse)
