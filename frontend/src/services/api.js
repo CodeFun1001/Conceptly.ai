@@ -56,6 +56,7 @@ export const sessionAPI = {
   getCheckpoints: (id) => api.get(`/sessions/${id}/checkpoints`),
   getCheckpointContent: (sessionId, checkpointId) => api.get(`/sessions/${sessionId}/checkpoints/${checkpointId}/content`),
   getCheckpointQuestions: (sessionId, checkpointId) => api.get(`/sessions/${sessionId}/checkpoints/${checkpointId}/questions`),
+  retryCheckpointQuestions: (sessionId, checkpointId, weakAreas) => api.post(`/sessions/${sessionId}/checkpoints/${checkpointId}/questions/retry`, weakAreas),
   completeCheckpoint: (sessionId, checkpointId) => api.post(`/sessions/${sessionId}/checkpoints/${checkpointId}/complete`),
   completeSession: (id) => api.post(`/sessions/${id}/complete`)
 };
@@ -76,6 +77,7 @@ export const gamificationAPI = {
   getProfile: () => api.get('/gamification/profile'),
   updateTutorMode: (mode) => api.patch('/gamification/tutor-mode', { tutor_mode: mode }),
   getBadges: () => api.get('/gamification/badges'),
+  getBadgeDefinitions: () => api.get('/gamification/badge-definitions'),
   checkBadges: () => api.post('/gamification/badges/check'),
   getWeakTopics: () => api.get('/gamification/weak-topics'),
   getDailyChallenge: () => api.get('/gamification/daily-challenge'),

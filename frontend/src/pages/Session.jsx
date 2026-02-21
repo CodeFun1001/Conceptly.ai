@@ -233,159 +233,20 @@ const Session = () => {
     return mnemonics;
   };
 
-  const renderFormattedText = (text) => {
-    if (!text) return null;
-
-    
-    const lines = text.split('\n');
-    const elements = [];
-    let currentParagraph = [];
-    let listItems = [];
-    let inList = false;
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-
-      if (trimmed.startsWith('###')) {
-        
-        if (currentParagraph.length > 0) {
-          elements.push(
-            <p key={`p-${index}`} style={{ marginBottom: '16px', lineHeight: '1.8' }}>
-              {currentParagraph.join(' ')}
-            </p>
-          );
-          currentParagraph = [];
-        }
-        
-        if (listItems.length > 0) {
-          elements.push(
-            <ul key={`ul-${index}`} style={{ marginLeft: '20px', marginBottom: '16px' }}>
-              {listItems}
-            </ul>
-          );
-          listItems = [];
-          inList = false;
-        }
-        
-        const headerText = trimmed.replace(/^###\s*/, '').replace(/\*\*/g, '');
-        elements.push(
-          <h3 key={`h3-${index}`} style={{ 
-            color: 'var(--primary)', 
-            marginTop: '24px', 
-            marginBottom: '12px',
-            fontSize: '18px',
-            fontWeight: '700'
-          }}>
-            {headerText}
-          </h3>
-        );
-      } 
-      
-      else if (trimmed.startsWith('**') && trimmed.indexOf('**', 2) > 0 && trimmed.indexOf('**', 2) < 50) {
-        if (currentParagraph.length > 0) {
-          elements.push(
-            <p key={`p-${index}`} style={{ marginBottom: '16px', lineHeight: '1.8' }}>
-              {currentParagraph.join(' ')}
-            </p>
-          );
-          currentParagraph = [];
-        }
-        if (listItems.length > 0) {
-          elements.push(
-            <ul key={`ul-${index}`} style={{ marginLeft: '20px', marginBottom: '16px' }}>
-              {listItems}
-            </ul>
-          );
-          listItems = [];
-          inList = false;
-        }
-        
-        const headerMatch = trimmed.match(/^\*\*([^*]+)\*\*/);
-        if (headerMatch) {
-          elements.push(
-            <h4 key={`h4-${index}`} style={{ 
-              color: 'var(--primary)', 
-              marginTop: '20px', 
-              marginBottom: '10px',
-              fontSize: '16px',
-              fontWeight: '600'
-            }}>
-              {headerMatch[1]}
-            </h4>
-          );
-        }
-      }
-      
-      else if (trimmed.startsWith('-') || trimmed.startsWith('*')) {
-        if (currentParagraph.length > 0) {
-          elements.push(
-            <p key={`p-${index}`} style={{ marginBottom: '16px', lineHeight: '1.8' }}>
-              {currentParagraph.join(' ')}
-            </p>
-          );
-          currentParagraph = [];
-        }
-        
-        const itemText = trimmed.substring(1).trim();
-        listItems.push(
-          <li key={`li-${index}`} style={{ marginBottom: '8px', lineHeight: '1.6' }}>
-            {itemText}
-          </li>
-        );
-        inList = true;
-      }
-      
-      else if (trimmed === '') {
-        if (currentParagraph.length > 0) {
-          elements.push(
-            <p key={`p-${index}`} style={{ marginBottom: '16px', lineHeight: '1.8' }}>
-              {currentParagraph.join(' ')}
-            </p>
-          );
-          currentParagraph = [];
-        }
-        if (listItems.length > 0) {
-          elements.push(
-            <ul key={`ul-${index}`} style={{ marginLeft: '20px', marginBottom: '16px' }}>
-              {listItems}
-            </ul>
-          );
-          listItems = [];
-          inList = false;
-        }
-      }
-      
-      else {
-        if (inList && listItems.length > 0) {
-          elements.push(
-            <ul key={`ul-${index}`} style={{ marginLeft: '20px', marginBottom: '16px' }}>
-              {listItems}
-            </ul>
-          );
-          listItems = [];
-          inList = false;
-        }
-        currentParagraph.push(trimmed);
-      }
-    });
-
-    
-    if (currentParagraph.length > 0) {
-      elements.push(
-        <p key="p-final" style={{ marginBottom: '16px', lineHeight: '1.8' }}>
-          {currentParagraph.join(' ')}
-        </p>
-      );
-    }
-    if (listItems.length > 0) {
-      elements.push(
-        <ul key="ul-final" style={{ marginLeft: '20px', marginBottom: '16px' }}>
-          {listItems}
-        </ul>
-      );
-    }
-
-    return <div>{elements}</div>;
+  // ReactMarkdown components for consistent styled rendering
+  const markdownComponents = {
+    h1: ({ children }) => <h1 style={{ color: 'var(--primary)', marginTop: '28px', marginBottom: '14px', fontSize: '22px', fontWeight: '700' }}>{children}</h1>,
+    h2: ({ children }) => <h2 style={{ color: 'var(--primary)', marginTop: '24px', marginBottom: '12px', fontSize: '20px', fontWeight: '700' }}>{children}</h2>,
+    h3: ({ children }) => <h3 style={{ color: 'var(--primary)', marginTop: '20px', marginBottom: '10px', fontSize: '17px', fontWeight: '700' }}>{children}</h3>,
+    h4: ({ children }) => <h4 style={{ color: 'var(--primary)', marginTop: '16px', marginBottom: '8px', fontSize: '15px', fontWeight: '600' }}>{children}</h4>,
+    p: ({ children }) => <p style={{ marginBottom: '16px', lineHeight: '1.8', color: 'var(--text-primary)' }}>{children}</p>,
+    ul: ({ children }) => <ul style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ul>,
+    ol: ({ children }) => <ol style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ol>,
+    li: ({ children }) => <li style={{ marginBottom: '6px', color: 'var(--text-primary)' }}>{children}</li>,
+    strong: ({ children }) => <strong style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{children}</strong>,
+    em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
+    code: ({ children }) => <code style={{ background: 'var(--surface-elevated)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace', color: 'var(--primary)' }}>{children}</code>,
+    blockquote: ({ children }) => <blockquote style={{ borderLeft: '4px solid var(--primary)', paddingLeft: '16px', margin: '16px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{children}</blockquote>,
   };
 
   if (loading) {
@@ -494,18 +355,20 @@ const Session = () => {
                 style={{
                   padding: '6px 12px',
                   borderRadius: '8px',
-                  border: '2px solid white',
-                  background: 'rgba(255,255,255,0.2)',
+                  border: '2px solid rgba(255,255,255,0.8)',
+                  background: 'rgba(255,255,255,0.25)',
                   color: 'white',
                   fontSize: '14px',
                   fontWeight: '600',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  WebkitAppearance: 'none',
+                  appearance: 'none'
                 }}
               >
-                <option value="chill_friend">😎 Chill Friend</option>
-                <option value="strict_mentor">📚 Strict Mentor</option>
-                <option value="supportive_buddy">🤗 Supportive Buddy</option>
-                <option value="exam_mode">🎯 Exam Mode</option>
+                <option value="chill_friend" style={{ background: '#4F46E5', color: 'white' }}>😎 Chill Friend</option>
+                <option value="strict_mentor" style={{ background: '#4F46E5', color: 'white' }}>📚 Strict Mentor</option>
+                <option value="supportive_buddy" style={{ background: '#4F46E5', color: 'white' }}>🤗 Supportive Buddy</option>
+                <option value="exam_mode" style={{ background: '#4F46E5', color: 'white' }}>🎯 Exam Mode</option>
               </select>
             </div>
           </div>
@@ -662,7 +525,7 @@ const Session = () => {
 
                   {displayedText && (
                     <div style={{ color: 'var(--text-primary)', fontSize: '15px' }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {displayedText}
                       </ReactMarkdown>
                     </div>

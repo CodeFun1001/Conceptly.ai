@@ -118,11 +118,19 @@ def generate_questions(
     if weak_areas:
         print(f"   Focusing on weak areas: {weak_areas}")
     
-    
-    num_questions = 3 if level == "beginner" else 4
-    
+    key_concepts_count = len(checkpoint.get('key_concepts', []))
+    objectives_count = len(checkpoint.get('objectives', []))
+    complexity_score = key_concepts_count + objectives_count
+
+    if complexity_score >= 10:
+        num_questions = 6
+    elif complexity_score >= 6:
+        num_questions = 5
+    else:
+        num_questions = 4 
+        
     if attempt_number > 0 and weak_areas:
-        num_questions = min(num_questions + 1, 5)
+        num_questions = min(num_questions + 1, 6)
     
     
     tutor_personalities = {
@@ -167,6 +175,7 @@ CRITICAL REQUIREMENTS:
 5. ONLY ONE correct answer per question
 6. correct_answer must be the EXACT FULL TEXT from options array
 7. NO letters (A/B/C/D) as correct_answer
+8. ALL 4 options must be plausible and specific to the topic — NEVER use generic placeholders like "Unrelated Concept A", "Alternative concept B", etc. Each wrong option should be a realistic-sounding but incorrect statement about the topic that a student might mistake for correct.
 
 {weak_focus_instruction}
 
@@ -216,7 +225,7 @@ CRITICAL REMINDERS:
 ✓ Each question tests a DIFFERENT concept from objectives
 ✓ correct_answer = EXACT FULL TEXT from options (not A/B/C/D)
 ✓ NO duplicate or similar questions
-✓ Make options clearly distinct
+✓ ALL 4 options must be specific, plausible statements about the topic — no generic placeholders like "Unrelated concept A" or "Alternative concept B". Each wrong option should sound like something a student might believe is correct but isn't.
 
 Return valid JSON array only.""")
     
@@ -339,17 +348,22 @@ Return valid JSON array only.""")
 def create_default_mcq(topic: str, num: int, level: str = "intermediate", weak_areas: List[str] = None):
     print(f"📝 Creating {num} fallback questions for {topic}")
     
+    # Generate meaningful-sounding distractors rather than placeholder labels
+    def make_distractors(correct_concept: str, topic_name: str):
+        return [
+            f"A misapplication of {topic_name} principles",
+            f"An outdated approach to {topic_name}",
+            f"A common misconception about {topic_name}"
+        ]
+    
     if weak_areas and len(weak_areas) > 0:
         return [{
             "type": "mcq",
-            "question": f"What is the key principle related to {weak_areas[i % len(weak_areas)]}?",
+            "question": f"Which statement best describes {weak_areas[i % len(weak_areas)]}?",
             "options": [
-                f"Core understanding of {weak_areas[i % len(weak_areas)]}",
-                "Alternative concept A",
-                "Alternative concept B",
-                "Alternative concept C"
-            ],
-            "correct_answer": f"Core understanding of {weak_areas[i % len(weak_areas)]}",
+                f"The correct understanding of {weak_areas[i % len(weak_areas)]}",
+            ] + make_distractors(weak_areas[i % len(weak_areas)], topic),
+            "correct_answer": f"The correct understanding of {weak_areas[i % len(weak_areas)]}",
             "explanation": "This directly addresses the core concept of the weak area.",
             "difficulty": level,
             "key_points": [weak_areas[i % len(weak_areas)]],
@@ -358,14 +372,11 @@ def create_default_mcq(topic: str, num: int, level: str = "intermediate", weak_a
     
     return [{
         "type": "mcq",
-        "question": f"What is a fundamental principle of {topic}?",
+        "question": f"Which statement best describes a fundamental principle of {topic}?",
         "options": [
-            f"Core principle of {topic}",
-            "Unrelated concept A",
-            "Unrelated concept B",
-            "Unrelated concept C"
-        ],
-        "correct_answer": f"Core principle of {topic}",
+            f"The core principle of {topic}",
+        ] + make_distractors(topic, topic),
+        "correct_answer": f"The core principle of {topic}",
         "explanation": "This represents the fundamental understanding of the topic.",
         "difficulty": level,
         "key_points": ["Fundamentals"],

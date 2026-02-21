@@ -256,7 +256,53 @@ def get_checkpoint_questions(session_id: int, checkpoint_id: int, current_user: 
     
     return {"questions": questions}
 
-@router.post("/{session_id}/checkpoints/{checkpoint_id}/complete")
+@router.post("/{session_id}/checkpoints/{checkpoint_id}/questions/retry")
+def get_retry_questions(
+    session_id: int,
+    checkpoint_id: int,
+    weak_areas: list = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate fresh questions focused on the user's weak areas after Feynman explanation."""
+    from fastapi import Body
+    checkpoint = db.query(Checkpoint).filter(
+        Checkpoint.id == checkpoint_id,
+        Checkpoint.session_id == session_id
+    ).first()
+
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+    checkpoint_data = {
+        "id": checkpoint.id,
+        "topic": checkpoint.topic,
+        "objectives": checkpoint.objectives,
+        "key_concepts": checkpoint.key_concepts,
+        "level": checkpoint.level
+    }
+
+    attempt_number = checkpoint.attempts
+
+    questions = question_generator.generate_questions(
+        checkpoint=checkpoint_data,
+        context=checkpoint.context or "",
+        level=checkpoint.level,
+        tutor_mode=current_user.tutor_mode,
+        weak_areas=weak_areas or [],
+        attempt_number=attempt_number,
+        session_id=session_id
+    )
+
+    # Update the questions cache with the new targeted ones
+    checkpoint.questions_cache = questions
+    db.commit()
+
+    print(f"✓ Retry questions generated for checkpoint {checkpoint_id}, weak areas: {weak_areas}")
+    return {"questions": questions}
+
+
+
 def complete_checkpoint(session_id: int, checkpoint_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     
     checkpoint = db.query(Checkpoint).filter(

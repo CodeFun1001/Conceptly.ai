@@ -83,13 +83,27 @@ def submit_quiz(checkpoint_id: int, quiz_answer: QuizAnswer, current_user: User 
     
     db.commit()
     
+    # Update streak on quiz activity
+    from app.models import UserAnalytics as UA
+    from datetime import timedelta
+    _analytics = db.query(UA).filter(UA.user_id == current_user.id).first()
+    if _analytics:
+        _today = datetime.utcnow().date()
+        _last = _analytics.last_study_date.date() if _analytics.last_study_date else None
+        if _last != _today:
+            _analytics.current_streak = (_analytics.current_streak + 1) if _last == _today - timedelta(days=1) else 1
+            _analytics.longest_streak = max(_analytics.longest_streak, _analytics.current_streak)
+            _analytics.last_study_date = datetime.utcnow()
+            db.commit()
+    
     return {
         "score": result['understanding_score'],
         "correct_count": result['correct_count'],
         "total_questions": result['total_questions'],
         "detailed_results": result['detailed_results'],
         "passed": result['passed'],
-        "xp_earned": xp_earned
+        "xp_earned": xp_earned,
+        "weak_areas": result.get('weak_areas', [])
     }
 
 @router.get("/{checkpoint_id}/feynman")

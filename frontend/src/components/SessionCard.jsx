@@ -17,12 +17,12 @@ const SessionCard = ({ session }) => {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
         <div>
-          <h3 style={{ color: '#262626', marginBottom: '8px' }}>{session.topic}</h3>
-          <p style={{ color: '#666', fontSize: '14px' }}>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>{session.topic}</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
             Started: {new Date(session.created_at).toLocaleDateString()}
           </p>
           {session.completed_at && (
-            <p style={{ color: '#666', fontSize: '14px' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               Completed: {new Date(session.completed_at).toLocaleDateString()}
             </p>
           )}

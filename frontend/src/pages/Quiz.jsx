@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { sessionAPI, checkpointAPI } from '../services/api';
 
 const triggerConfetti = () => {
@@ -66,15 +66,27 @@ if (typeof document !== 'undefined') {
 const Quiz = () => {
   const { sessionId, checkpointId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [isRetryMode, setIsRetryMode] = useState(false);
+  const [retryWeakAreas, setRetryWeakAreas] = useState([]);
 
   useEffect(() => {
-    loadQuestions();
+    const params = new URLSearchParams(location.search);
+    const retryMode = params.get('retryMode') === 'true';
+    const weakAreasParam = params.get('weakAreas');
+    let weakAreas = [];
+    if (weakAreasParam) {
+      try { weakAreas = JSON.parse(decodeURIComponent(weakAreasParam)); } catch {}
+    }
+    setIsRetryMode(retryMode);
+    setRetryWeakAreas(weakAreas);
+    loadQuestions(retryMode, weakAreas);
   }, []);
 
   useEffect(() => {
@@ -83,9 +95,14 @@ const Quiz = () => {
     }
   }, [result]);
 
-  const loadQuestions = async () => {
+  const loadQuestions = async (retryMode = false, weakAreas = []) => {
     try {
-      const response = await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
+      let response;
+      if (retryMode && weakAreas.length > 0) {
+        response = await sessionAPI.retryCheckpointQuestions(sessionId, checkpointId, weakAreas);
+      } else {
+        response = await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
+      }
       setQuestions(response.data.questions);
       setAnswers(new Array(response.data.questions.length).fill(''));
     } catch (error) {
@@ -312,14 +329,20 @@ const Quiz = () => {
   return (
     <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div className="card card-elevated" style={{ 
-        background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', 
+        background: isRetryMode 
+          ? 'linear-gradient(135deg, #8B5CF6, #A78BFA)' 
+          : 'linear-gradient(135deg, #4F46E5, #7C3AED)', 
         color: 'white', 
         marginBottom: '24px',
         border: 'none'
       }}>
-        <h1 style={{ margin: '0 0 8px 0' }}>🎯 Knowledge Check</h1>
+        <h1 style={{ margin: '0 0 8px 0' }}>
+          {isRetryMode ? '🎯 Targeted Retry Quiz' : '🎯 Knowledge Check'}
+        </h1>
         <p style={{ margin: 0, opacity: 0.9, fontSize: '16px' }}>
-          Test your understanding of the concepts you've learned
+          {isRetryMode
+            ? `New questions focused on: ${retryWeakAreas.slice(0, 2).join(', ')}${retryWeakAreas.length > 2 ? '…' : ''}`
+            : 'Test your understanding of the concepts you\'ve learned'}
         </p>
       </div>
 

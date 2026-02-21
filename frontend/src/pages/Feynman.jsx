@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { checkpointAPI } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const Feynman = () => {
   const { sessionId, checkpointId } = useParams();
@@ -27,8 +29,24 @@ const Feynman = () => {
     }
   };
 
-  const handleTryAgain = () => {
-    navigate(`/quiz/${sessionId}/${checkpointId}`);
+  const markdownComponents = {
+    h1: ({ children }) => <h1 style={{ color: 'var(--primary)', marginTop: '24px', marginBottom: '12px', fontSize: '20px', fontWeight: '700' }}>{children}</h1>,
+    h2: ({ children }) => <h2 style={{ color: 'var(--primary)', marginTop: '20px', marginBottom: '10px', fontSize: '18px', fontWeight: '700' }}>{children}</h2>,
+    h3: ({ children }) => <h3 style={{ color: 'var(--primary)', marginTop: '18px', marginBottom: '8px', fontSize: '16px', fontWeight: '700' }}>{children}</h3>,
+    h4: ({ children }) => <h4 style={{ color: 'var(--primary)', marginTop: '14px', marginBottom: '6px', fontSize: '15px', fontWeight: '600' }}>{children}</h4>,
+    p: ({ children }) => <p style={{ marginBottom: '16px', lineHeight: '1.8', color: 'var(--text-primary)' }}>{children}</p>,
+    ul: ({ children }) => <ul style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ul>,
+    ol: ({ children }) => <ol style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ol>,
+    li: ({ children }) => <li style={{ marginBottom: '6px', color: 'var(--text-primary)' }}>{children}</li>,
+    strong: ({ children }) => <strong style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{children}</strong>,
+    em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
+    blockquote: ({ children }) => <blockquote style={{ borderLeft: '4px solid var(--primary)', paddingLeft: '16px', margin: '16px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{children}</blockquote>,
+  };
+
+  const handleTryAgainWeakTopics = () => {
+    // Navigate to quiz with weak areas as query params so the quiz can generate targeted questions
+    const weakAreasParam = encodeURIComponent(JSON.stringify(weakAreas));
+    navigate(`/quiz/${sessionId}/${checkpointId}?weakAreas=${weakAreasParam}&retryMode=true`);
   };
 
   const handleDifferentApproach = () => {
@@ -95,17 +113,10 @@ const Feynman = () => {
         marginBottom: '24px',
         animationDelay: '0.2s'
       }}>
-        <div style={{ 
-          fontSize: '15px', 
-          lineHeight: '1.8',
-          color: 'var(--text-primary)',
-          whiteSpace: 'pre-wrap'
-        }}>
-          {explanation.split('\n\n').map((paragraph, idx) => (
-            <p key={idx} style={{ marginBottom: '20px' }}>
-              {paragraph}
-            </p>
-          ))}
+        <div style={{ fontSize: '15px', lineHeight: '1.8', color: 'var(--text-primary)' }}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {explanation}
+          </ReactMarkdown>
         </div>
       </div>
 
@@ -121,8 +132,25 @@ const Feynman = () => {
           flexDirection: 'column', 
           gap: '12px'
         }}>
+          {weakAreas.length > 0 && (
+            <button 
+              onClick={handleTryAgainWeakTopics}
+              className="btn btn-primary"
+              style={{ 
+                width: '100%', 
+                fontSize: '16px', 
+                padding: '16px',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
+                border: 'none'
+              }}
+            >
+              🎯 Try Again — New Questions on Weak Topics
+            </button>
+          )}
+
           <button 
-            onClick={handleTryAgain}
+            onClick={() => navigate(`/quiz/${sessionId}/${checkpointId}`)}
             className="btn btn-primary"
             style={{ 
               width: '100%', 
@@ -131,7 +159,7 @@ const Feynman = () => {
               justifyContent: 'center'
             }}
           >
-            🎯 Try the Quiz Again
+            🔁 Retry Full Quiz
           </button>
           
           <button 
