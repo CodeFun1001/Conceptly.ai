@@ -40,7 +40,11 @@ const Login = () => {
         padding: '40px'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🧠</div>
+          <img 
+            src="/logo.png"
+            alt="Conceptly logo"
+            style={{ width: '64px', marginBottom: '16px' }}
+          />
           <h2 style={{ 
             color: 'var(--primary)', 
             marginBottom: '8px',

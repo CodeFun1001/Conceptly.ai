@@ -15,8 +15,9 @@ const Landing = () => {
   return (
     <div className="container" style={{ maxWidth: '1000px', margin: '0 auto', paddingTop: '60px' }}>
       <div style={{ textAlign: 'center', marginBottom: '60px' }}>
-        <h1 style={{ fontSize: '48px', color: '#4392F1', marginBottom: '16px' }}>
-          🧠 Conceptly
+        <h1 style={{ fontSize: '48px', color: '#4392F1', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          <img src="/logo.png" alt="logo" style={{ width: '48px' }} />
+          Conceptly
         </h1>
         <p style={{ fontSize: '20px', color: '#666' }}>
           Your AI-Powered Mastery Learning Companion

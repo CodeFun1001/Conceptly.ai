@@ -43,7 +43,10 @@ const Navbar = () => {
     <>
       <nav className="navbar">
         <div className="navbar-brand" onClick={handleBrandClick}>
-          <h1>🧠 Conceptly</h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/logo.png" alt="logo" style={{ width: '32px' }} />
+            Conceptly
+          </h1>
           <span className="badge" style={{ 
             background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', 
             color: 'white',
@@ -92,7 +95,6 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Logout Confirmation Modal */}
       {showLogoutModal && (
         <div style={{
           position: 'fixed',
