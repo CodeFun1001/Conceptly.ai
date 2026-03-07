@@ -1,209 +1,141 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { sessionAPI, checkpointAPI } from '../services/api';
-
-const triggerConfetti = () => {
-  const duration = 3 * 1000;
-  const animationEnd = Date.now() + duration;
-
-  function randomInRange(min, max) {
-    return Math.random() * (max - min) + min;
-  }
-
-  const interval = setInterval(function() {
-    const timeLeft = animationEnd - Date.now();
-
-    if (timeLeft <= 0) {
-      return clearInterval(interval);
-    }
-
-    const particleCount = 50 * (timeLeft / duration);
-    
-    for (let i = 0; i < particleCount; i++) {
-      createConfettiParticle(
-        Math.random() * window.innerWidth,
-        Math.random() * window.innerHeight / 3
-      );
-    }
-  }, 250);
-};
+import { sessionAPI, checkpointAPI, gamificationAPI } from '../services/api';
+import BadgePopup from '../components/BadgePopup';
 
 const createConfettiParticle = (x, y) => {
-  const particle = document.createElement('div');
-  particle.style.cssText = `
-    position: fixed;
-    width: 10px;
-    height: 10px;
-    background: ${['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'][Math.floor(Math.random() * 5)]};
-    left: ${x}px;
-    top: ${y}px;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 10000;
-    animation: confetti-fall ${2 + Math.random() * 2}s ease-out forwards;
+  const el = document.createElement('div');
+  el.style.cssText = `
+    position:fixed; width:10px; height:10px; pointer-events:none; z-index:10000;
+    left:${x}px; top:${y}px; border-radius:50%;
+    background:${['#FF6B6B','#4ECDC4','#45B7D1','#FFA07A','#98D8C8'][Math.floor(Math.random()*5)]};
+    animation:cf ${2+Math.random()*2}s ease-out forwards;
   `;
-  
-  document.body.appendChild(particle);
-  
-  setTimeout(() => {
-    particle.remove();
-  }, 4000);
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
 };
 
 if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes confetti-fall {
-      to {
-        transform: translateY(${window.innerHeight}px) rotate(${360 * 2}deg);
-        opacity: 0;
-      }
-    }
-  `;
-  document.head.appendChild(style);
+  const s = document.createElement('style');
+  s.textContent = `@keyframes cf { to { transform:translateY(${typeof window!=='undefined'?window.innerHeight:800}px) rotate(720deg); opacity:0 } }`;
+  document.head.appendChild(s);
 }
+
+const triggerConfetti = () => {
+  const end = Date.now() + 3000;
+  const tick = setInterval(() => {
+    if (Date.now() > end) return clearInterval(tick);
+    const n = 50 * ((end - Date.now()) / 3000);
+    for (let i = 0; i < n; i++)
+      createConfettiParticle(Math.random() * window.innerWidth, Math.random() * window.innerHeight / 3);
+  }, 250);
+};
 
 const Quiz = () => {
   const { sessionId, checkpointId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [questions, setQuestions] = useState([]);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState(null);
-  const [isRetryMode, setIsRetryMode] = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
+
+  const [questions,      setQuestions]      = useState([]);
+  const [currentQuestion,setCurrentQuestion]= useState(0);
+  const [answers,        setAnswers]        = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [submitting,     setSubmitting]     = useState(false);
+  const [result,         setResult]         = useState(null);
+  const [isRetryMode,    setIsRetryMode]    = useState(false);
   const [retryWeakAreas, setRetryWeakAreas] = useState([]);
+  const [newBadges, setNewBadges] = useState([]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const retryMode = params.get('retryMode') === 'true';
-    const weakAreasParam = params.get('weakAreas');
     let weakAreas = [];
-    if (weakAreasParam) {
-      try { weakAreas = JSON.parse(decodeURIComponent(weakAreasParam)); } catch {}
-    }
+    try { weakAreas = JSON.parse(decodeURIComponent(params.get('weakAreas') || '[]')); } catch {}
     setIsRetryMode(retryMode);
     setRetryWeakAreas(weakAreas);
     loadQuestions(retryMode, weakAreas);
   }, []);
 
   useEffect(() => {
-    if (result && result.passed) {
-      triggerConfetti();
-    }
+    if (result?.passed) triggerConfetti();
   }, [result]);
 
   const loadQuestions = async (retryMode = false, weakAreas = []) => {
     try {
-      let response;
-      if (retryMode && weakAreas.length > 0) {
-        response = await sessionAPI.retryCheckpointQuestions(sessionId, checkpointId, weakAreas);
-      } else {
-        response = await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
-      }
-      setQuestions(response.data.questions);
-      setAnswers(new Array(response.data.questions.length).fill(''));
-    } catch (error) {
-      console.error('Failed to load questions:', error);
+      const res = retryMode && weakAreas.length > 0
+        ? await sessionAPI.retryCheckpointQuestions(sessionId, checkpointId, weakAreas)
+        : await sessionAPI.getCheckpointQuestions(sessionId, checkpointId);
+      setQuestions(res.data.questions);
+      setAnswers(new Array(res.data.questions.length).fill(''));
+    } catch (err) {
+      console.error('Failed to load questions:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAnswerSelect = (answer) => {
-    const newAnswers = [...answers];
-    newAnswers[currentQuestion] = answer;
-    setAnswers(newAnswers);
-  };
-
-  const handleNext = () => {
-    if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentQuestion > 0) {
-      setCurrentQuestion(currentQuestion - 1);
-    }
+    const next = [...answers];
+    next[currentQuestion] = answer;
+    setAnswers(next);
   };
 
   const handleSubmit = async () => {
-    if (answers.some(a => !a)) {
-      alert('Please answer all questions before submitting');
-      return;
-    }
-
+    if (answers.some(a => !a)) { alert('Please answer all questions before submitting'); return; }
     setSubmitting(true);
     try {
-      const response = await checkpointAPI.submitQuiz(checkpointId, answers);
-      setResult(response.data);
-    } catch (error) {
-      console.error('Failed to submit quiz:', error);
+      const res = await checkpointAPI.submitQuiz(checkpointId, answers);
+      setResult(res.data);
+
+      if (res.data.passed) {
+        try {
+          const badgeRes = await gamificationAPI.checkBadges();
+          const earned = badgeRes?.data?.newly_awarded || [];
+          if (earned.length > 0) setNewBadges(earned);
+        } catch (e) {
+          console.warn('Badge check failed silently:', e);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit quiz:', err);
       alert('Failed to submit quiz. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleFeynman = () => {
-    navigate(`/feynman/${sessionId}/${checkpointId}`);
-  };
-
-  const handleContinue = () => {
-    navigate(`/session/${sessionId}`);
-  };
-
   if (loading) {
     return (
       <div className="loading">
-        <div className="loading-spinner"></div>
+        <div className="loading-spinner" />
         <p>Loading quiz...</p>
       </div>
     );
   }
 
   if (result) {
-    const passed = result.passed;
+    const passed     = result.passed;
     const percentage = (result.score * 100).toFixed(0);
 
     return (
       <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <div 
-          className="card card-elevated fade-in" 
-          style={{ 
-            background: passed 
-              ? 'linear-gradient(135deg, #10B981 0%, #34D399 100%)' 
-              : 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
-            color: 'white',
-            textAlign: 'center',
-            padding: '48px 32px',
-            marginBottom: '24px',
-            border: 'none'
-          }}
-        >
-          <div style={{ fontSize: '72px', marginBottom: '16px', animation: 'bounce 1s ease' }}>
-            {passed ? '🎉' : '📚'}
-          </div>
-          <h1 style={{ margin: '0 0 16px 0' }}>
-            {passed ? 'Checkpoint Passed!' : 'Keep Learning!'}
-          </h1>
-          <p style={{ fontSize: '56px', fontWeight: '800', margin: '16px 0' }}>
-            {percentage}%
-          </p>
+        <BadgePopup badges={newBadges} onClose={() => setNewBadges([])} />
+
+        <div className="card card-elevated fade-in" style={{
+          background: passed
+            ? 'linear-gradient(135deg, #10B981 0%, #34D399 100%)'
+            : 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+          color: 'white', textAlign: 'center', padding: '48px 32px',
+          marginBottom: '24px', border: 'none',
+        }}>
+          <div style={{ fontSize: '72px', marginBottom: '16px' }}>{passed ? '🎉' : '📚'}</div>
+          <h1 style={{ margin: '0 0 16px 0' }}>{passed ? 'Checkpoint Passed!' : 'Keep Learning!'}</h1>
+          <p style={{ fontSize: '56px', fontWeight: '800', margin: '16px 0' }}>{percentage}%</p>
           <p style={{ margin: 0, fontSize: '20px', opacity: 0.95 }}>
             {result.correct_count}/{result.total_questions} Correct
           </p>
           {result.xp_earned > 0 && (
-            <div style={{ 
-              marginTop: '20px', 
-              padding: '12px 24px', 
-              background: 'rgba(255, 255, 255, 0.2)', 
-              borderRadius: 'var(--radius)',
-              display: 'inline-block'
-            }}>
+            <div style={{ marginTop: '20px', padding: '12px 24px', background: 'rgba(255,255,255,0.2)', borderRadius: 'var(--radius)', display: 'inline-block' }}>
               <span style={{ fontSize: '18px', fontWeight: '700' }}>+{result.xp_earned} XP Earned! 🌟</span>
             </div>
           )}
@@ -211,80 +143,37 @@ const Quiz = () => {
 
         <div className="card" style={{ marginBottom: '24px' }}>
           <h3 style={{ marginBottom: '20px', color: 'var(--primary)' }}>📋 Detailed Results</h3>
-          {result.detailed_results.map((detail, idx) => (
-            <div 
-              key={idx}
-              className="quiz-question fade-in"
-              style={{ 
-                borderLeftColor: detail.is_correct ? 'var(--success)' : 'var(--error)',
-                background: detail.is_correct ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
-                marginBottom: '20px',
-                animationDelay: `${idx * 0.1}s`
-              }}
-            >
+          {result.detailed_results.map((detail, i) => (
+            <div key={i} className="quiz-question fade-in" style={{
+              borderLeftColor: detail.is_correct ? 'var(--success)' : 'var(--error)',
+              background:      detail.is_correct ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)',
+              marginBottom: '20px', animationDelay: `${i * 0.1}s`,
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>Question {idx + 1}</h4>
-                <span style={{ fontSize: '28px' }}>
-                  {detail.is_correct ? '✅' : '❌'}
-                </span>
+                <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>Question {i + 1}</h4>
+                <span style={{ fontSize: '28px' }}>{detail.is_correct ? '✅' : '❌'}</span>
               </div>
-              
-              <p style={{ marginBottom: '16px', fontWeight: '500', fontSize: '16px' }}>
-                {detail.question}
-              </p>
-              
-              <div style={{ 
-                background: 'var(--surface)', 
-                borderRadius: 'var(--radius)', 
-                padding: '16px', 
-                marginBottom: '12px',
-                border: '2px solid var(--border)'
-              }}>
+              <p style={{ marginBottom: '16px', fontWeight: '500', fontSize: '16px' }}>{detail.question}</p>
+
+              <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: '16px', marginBottom: '12px', border: '2px solid var(--border)' }}>
                 <strong style={{ color: 'var(--text-secondary)' }}>Your Answer:</strong>
-                <div style={{ 
-                  background: detail.is_correct ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                  padding: '12px',
-                  borderRadius: 'var(--radius-sm)',
-                  marginTop: '8px',
-                  color: detail.is_correct ? 'var(--success)' : 'var(--error)',
-                  fontWeight: '600'
-                }}>
+                <div style={{ background: detail.is_correct ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', padding: '12px', borderRadius: 'var(--radius-sm)', marginTop: '8px', color: detail.is_correct ? 'var(--success)' : 'var(--error)', fontWeight: '600' }}>
                   {detail.user_answer}
                 </div>
               </div>
-              
+
               {!detail.is_correct && (
-                <div style={{ 
-                  background: 'var(--surface)', 
-                  borderRadius: 'var(--radius)', 
-                  padding: '16px', 
-                  marginBottom: '12px',
-                  border: '2px solid var(--border)'
-                }}>
+                <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: '16px', marginBottom: '12px', border: '2px solid var(--border)' }}>
                   <strong style={{ color: 'var(--text-secondary)' }}>Correct Answer:</strong>
-                  <div style={{ 
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    padding: '12px',
-                    borderRadius: 'var(--radius-sm)',
-                    marginTop: '8px',
-                    color: 'var(--success)',
-                    fontWeight: '600'
-                  }}>
+                  <div style={{ background: 'rgba(16,185,129,0.1)', padding: '12px', borderRadius: 'var(--radius-sm)', marginTop: '8px', color: 'var(--success)', fontWeight: '600' }}>
                     {detail.correct_answer}
                   </div>
                 </div>
               )}
-              
-              <div style={{ 
-                background: 'var(--surface-elevated)', 
-                borderRadius: 'var(--radius)', 
-                padding: '16px',
-                border: '1px solid var(--border)'
-              }}>
+
+              <div style={{ background: 'var(--surface-elevated)', borderRadius: 'var(--radius)', padding: '16px', border: '1px solid var(--border)' }}>
                 <strong>💡 Explanation:</strong>
-                <p style={{ marginTop: '8px', marginBottom: 0, color: 'var(--text-secondary)' }}>
-                  {detail.explanation}
-                </p>
+                <p style={{ marginTop: '8px', marginBottom: 0, color: 'var(--text-secondary)' }}>{detail.explanation}</p>
               </div>
             </div>
           ))}
@@ -292,27 +181,15 @@ const Quiz = () => {
 
         <div className="card" style={{ textAlign: 'center' }}>
           {passed ? (
-            <button 
-              onClick={handleContinue}
-              className="btn btn-primary"
-              style={{ fontSize: '16px', padding: '16px 40px' }}
-            >
+            <button onClick={() => navigate(`/session/${sessionId}`)} className="btn btn-primary" style={{ fontSize: '16px', padding: '16px 40px' }}>
               ➡️ Continue to Next Checkpoint
             </button>
           ) : (
             <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button 
-                onClick={handleFeynman}
-                className="btn btn-primary"
-                style={{ fontSize: '16px', padding: '16px 32px' }}
-              >
+              <button onClick={() => navigate(`/feynman/${sessionId}/${checkpointId}`)} className="btn btn-primary" style={{ fontSize: '16px', padding: '16px 32px' }}>
                 💡 Get Simplified Explanation
               </button>
-              <button 
-                onClick={() => navigate(`/session/${sessionId}`)}
-                className="btn btn-secondary"
-                style={{ fontSize: '16px', padding: '16px 32px' }}
-              >
+              <button onClick={() => navigate(`/session/${sessionId}`)} className="btn btn-secondary" style={{ fontSize: '16px', padding: '16px 32px' }}>
                 📖 Review Content
               </button>
             </div>
@@ -322,109 +199,63 @@ const Quiz = () => {
     );
   }
 
-  const question = questions[currentQuestion];
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  const question     = questions[currentQuestion];
   const answeredCount = answers.filter(a => a).length;
 
   return (
     <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <div className="card card-elevated" style={{ 
-        background: isRetryMode 
-          ? 'linear-gradient(135deg, #8B5CF6, #A78BFA)' 
-          : 'linear-gradient(135deg, #4F46E5, #7C3AED)', 
-        color: 'white', 
-        marginBottom: '24px',
-        border: 'none'
+      <div className="card card-elevated" style={{
+        background: isRetryMode ? 'linear-gradient(135deg,#8B5CF6,#A78BFA)' : 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+        color: 'white', marginBottom: '24px', border: 'none',
       }}>
-        <h1 style={{ margin: '0 0 8px 0' }}>
-          {isRetryMode ? '🎯 Targeted Retry Quiz' : '🎯 Knowledge Check'}
-        </h1>
+        <h1 style={{ margin: '0 0 8px 0' }}>{isRetryMode ? '🎯 Targeted Retry Quiz' : '🎯 Knowledge Check'}</h1>
         <p style={{ margin: 0, opacity: 0.9, fontSize: '16px' }}>
           {isRetryMode
-            ? `New questions focused on: ${retryWeakAreas.slice(0, 2).join(', ')}${retryWeakAreas.length > 2 ? '…' : ''}`
-            : 'Test your understanding of the concepts you\'ve learned'}
+            ? `New questions focused on: ${retryWeakAreas.slice(0,2).join(', ')}${retryWeakAreas.length>2?'…':''}`
+            : "Test your understanding of the concepts you've learned"}
         </p>
       </div>
-
+      
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-          <span style={{ fontWeight: '600', fontSize: '15px' }}>
-            Question {currentQuestion + 1} of {questions.length}
-          </span>
+          <span style={{ fontWeight: '600', fontSize: '15px' }}>Question {currentQuestion + 1} of {questions.length}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-              {answeredCount}/{questions.length} answered
-            </span>
+            <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>{answeredCount}/{questions.length} answered</span>
             <span style={{ color: 'var(--primary)', fontWeight: '700', fontSize: '18px' }}>
               {Math.round((answeredCount / questions.length) * 100)}%
             </span>
           </div>
         </div>
         <div className="progress-bar" style={{ height: '8px', borderRadius: '4px' }}>
-          <div 
-            className="progress-fill" 
-            style={{ 
-              width: `${(answeredCount / questions.length) * 100}%`,
-              transition: 'width 0.3s ease'
-            }}
-          ></div>
+          <div className="progress-fill" style={{ width: `${(answeredCount / questions.length) * 100}%`, transition: 'width 0.3s ease' }} />
         </div>
       </div>
 
       <div className="quiz-question" style={{ minHeight: '400px' }}>
-        <p style={{ 
-          fontSize: '20px', 
-          lineHeight: '1.7', 
-          marginBottom: '32px', 
-          fontWeight: '500',
-          color: 'var(--text-primary)'
-        }}>
+        <p style={{ fontSize: '20px', lineHeight: '1.7', marginBottom: '32px', fontWeight: '500', color: 'var(--text-primary)' }}>
           {question.question}
         </p>
-
         <div className="quiz-options">
-          {question.options.map((option, idx) => {
+          {question.options.map((option, i) => {
             const isSelected = answers[currentQuestion] === option;
             return (
               <div
-                key={idx}
+                key={i}
                 className={`quiz-option ${isSelected ? 'selected' : ''}`}
                 onClick={() => handleAnswerSelect(option)}
-                style={{
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  transform: isSelected ? 'translateX(4px)' : 'translateX(0)'
-                }}
+                style={{ cursor: 'pointer', transition: 'all 0.2s ease', transform: isSelected ? 'translateX(4px)' : 'translateX(0)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
+                    width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
+                    border:     `2px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
                     background: isSelected ? 'var(--primary)' : 'transparent',
-                    flexShrink: 0,
                     transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    {isSelected && (
-                      <div style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: 'white'
-                      }}></div>
-                    )}
+                    {isSelected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'white' }} />}
                   </div>
-                  <span style={{ 
-                    flex: 1, 
-                    fontSize: '16px',
-                    fontWeight: isSelected ? '600' : '400'
-                  }}>
-                    {option}
-                  </span>
+                  <span style={{ flex: 1, fontSize: '16px', fontWeight: isSelected ? '600' : '400' }}>{option}</span>
                 </div>
               </div>
             );
@@ -432,52 +263,28 @@ const Quiz = () => {
         </div>
       </div>
 
-      <div className="card" style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        flexWrap: 'wrap', 
-        gap: '16px',
-        marginTop: '24px'
-      }}>
-        <button 
-          onClick={handlePrevious}
-          className="btn btn-secondary"
-          disabled={currentQuestion === 0}
-          style={{ minWidth: '120px', opacity: currentQuestion === 0 ? 0.5 : 1 }}
-        >
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginTop: '24px' }}>
+        <button onClick={() => setCurrentQuestion(q => q - 1)} className="btn btn-secondary" disabled={currentQuestion === 0} style={{ minWidth: '120px', opacity: currentQuestion === 0 ? 0.5 : 1 }}>
           ⬅️ Previous
         </button>
 
         <div style={{ textAlign: 'center' }}>
-          {answers[currentQuestion] ? (
-            <span style={{ color: 'var(--success)', fontWeight: '600', fontSize: '16px' }}>
-              ✅ Answered
-            </span>
-          ) : (
-            <span style={{ color: 'var(--text-tertiary)', fontSize: '16px' }}>
-              Select an answer
-            </span>
-          )}
+          {answers[currentQuestion]
+            ? <span style={{ color: 'var(--success)', fontWeight: '600', fontSize: '16px' }}>✅ Answered</span>
+            : <span style={{ color: 'var(--text-tertiary)', fontSize: '16px' }}>Select an answer</span>
+          }
         </div>
 
         {currentQuestion < questions.length - 1 ? (
-          <button 
-            onClick={handleNext}
-            className="btn btn-primary"
-            style={{ minWidth: '120px' }}
-          >
+          <button onClick={() => setCurrentQuestion(q => q + 1)} className="btn btn-primary" style={{ minWidth: '120px' }}>
             Next ➡️
           </button>
         ) : (
-          <button 
+          <button
             onClick={handleSubmit}
             className="btn btn-primary"
             disabled={submitting || answeredCount < questions.length}
-            style={{ 
-              minWidth: '150px',
-              opacity: (submitting || answeredCount < questions.length) ? 0.6 : 1
-            }}
+            style={{ minWidth: '150px', opacity: (submitting || answeredCount < questions.length) ? 0.6 : 1 }}
           >
             {submitting ? 'Submitting...' : '📊 Submit Quiz'}
           </button>

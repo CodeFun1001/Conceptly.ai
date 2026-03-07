@@ -21,12 +21,9 @@ const Session = () => {
   const [canComplete, setCanComplete] = useState(false);
   const [tutorMode, setTutorMode] = useState('supportive_buddy');
   const typingRef = useRef(null);
-  
-  
   const hasLoadedRef = useRef(false);
 
   useEffect(() => {
-    
     if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
       loadSession();
@@ -39,7 +36,6 @@ const Session = () => {
     }
   }, [currentCheckpoint, contentCache]);
 
-  
   useEffect(() => {
     if (checkpoints.length > 0) {
       checkCanComplete();
@@ -49,7 +45,6 @@ const Session = () => {
   const typeText = (text) => {
     setIsTyping(true);
     setDisplayedText('');
-    
     let index = 0;
     const interval = setInterval(() => {
       if (index < text.length) {
@@ -60,7 +55,6 @@ const Session = () => {
         setIsTyping(false);
       }
     }, 15);
-
     typingRef.current = interval;
   };
 
@@ -74,25 +68,22 @@ const Session = () => {
 
   const loadSession = async () => {
     try {
-      
       const profileRes = await gamificationAPI.getProfile();
       setTutorMode(profileRes.data.tutor_mode || 'supportive_buddy');
-      
+
       const [sessionRes, checkpointsRes] = await Promise.all([
         sessionAPI.getOne(id),
         sessionAPI.getCheckpoints(id)
       ]);
-      
+
       setSession(sessionRes.data);
-      
+
       if (checkpointsRes.data.length === 0) {
         await generateCheckpoints();
       } else {
         setCheckpoints(checkpointsRes.data);
-        
         const firstPending = checkpointsRes.data.find(cp => cp.status === 'pending');
         const checkpointToLoad = firstPending || checkpointsRes.data[0];
-        
         if (checkpointToLoad) {
           await loadCheckpointContent(checkpointToLoad);
         }
@@ -107,11 +98,9 @@ const Session = () => {
   const generateCheckpoints = async () => {
     setGenerating(true);
     try {
-      console.log('📚 Generating checkpoints for session', id);
       await sessionAPI.generateCheckpoints(id);
       const checkpointsRes = await sessionAPI.getCheckpoints(id);
       setCheckpoints(checkpointsRes.data);
-      
       if (checkpointsRes.data.length > 0) {
         await loadCheckpointContent(checkpointsRes.data[0]);
       }
@@ -126,20 +115,12 @@ const Session = () => {
   const loadCheckpointContent = async (checkpoint) => {
     setCurrentCheckpoint(checkpoint);
     setDisplayedText('');
-    
-    if (contentCache[checkpoint.id]) {
-      return;
-    }
+    if (contentCache[checkpoint.id]) return;
 
     setLoadingContent(true);
     try {
       const response = await sessionAPI.getCheckpointContent(id, checkpoint.id);
-      
-      setContentCache(prev => ({
-        ...prev,
-        [checkpoint.id]: response.data
-      }));
-      
+      setContentCache(prev => ({ ...prev, [checkpoint.id]: response.data }));
     } catch (error) {
       console.error('Failed to load checkpoint content:', error);
       alert('Failed to load checkpoint content. Please try again.');
@@ -157,7 +138,6 @@ const Session = () => {
   const handleCheckpointClick = (checkpoint) => {
     const checkpointIndex = checkpoints.findIndex(cp => cp.id === checkpoint.id);
     const isLocked = checkpointIndex > 0 && checkpoints[checkpointIndex - 1].status !== 'completed';
-    
     if (!isLocked) {
       loadCheckpointContent(checkpoint);
       setSidebarOpen(false);
@@ -166,10 +146,12 @@ const Session = () => {
 
   const checkCanComplete = async () => {
     try {
-      const response = await sessionAPI.getOne(id);
-      const checkpointsRes = await sessionAPI.getCheckpoints(id);
+      const [sessionRes, checkpointsRes] = await Promise.all([
+        sessionAPI.getOne(id),
+        sessionAPI.getCheckpoints(id)
+      ]);
       const allCompleted = checkpointsRes.data.every(cp => cp.status === 'completed');
-      setCanComplete(allCompleted && response.data.status !== 'completed');
+      setCanComplete(allCompleted && sessionRes.data.status !== 'completed');
     } catch (error) {
       console.error('Failed to check completion status:', error);
     }
@@ -177,11 +159,9 @@ const Session = () => {
 
   const handleCompleteSession = async () => {
     try {
-      const response = await sessionAPI.completeSession(id);
-      alert(`🎉 ${response.data.message}\n\nTotal XP Earned: ${response.data.total_xp_earned}\n${response.data.level_up ? `New Level: ${response.data.new_level}!` : ''}`);
-      
-      
-      navigate('/dashboard');
+      await sessionAPI.completeSession(id);
+      // Navigate to completion page instead of alert
+      navigate(`/completion/${id}`);
     } catch (error) {
       console.error('Failed to complete session:', error);
       if (error.response?.data?.detail) {
@@ -199,7 +179,6 @@ const Session = () => {
       alert(`Tutor mode changed to: ${getTutorModeName(newMode)}`);
     } catch (error) {
       console.error('Failed to change tutor mode:', error);
-      alert('Failed to change tutor mode. Please try again.');
     }
   };
 
@@ -215,13 +194,11 @@ const Session = () => {
 
   const extractMnemonics = (text) => {
     if (!text) return [];
-    
     const mnemonicPatterns = [
       /(?:remember|mnemonic|acronym|trick|tip|easy way):\s*([^.!?]+[.!?])/gi,
       /(?:think of it as|imagine|visualize):\s*([^.!?]+[.!?])/gi,
       /(?:to help you remember|here's a tip):\s*([^.!?]+[.!?])/gi
     ];
-
     const mnemonics = [];
     mnemonicPatterns.forEach(pattern => {
       let match;
@@ -229,11 +206,9 @@ const Session = () => {
         mnemonics.push(match[1].trim());
       }
     });
-
     return mnemonics;
   };
 
-  // ReactMarkdown components for consistent styled rendering
   const markdownComponents = {
     h1: ({ children }) => <h1 style={{ color: 'var(--primary)', marginTop: '28px', marginBottom: '14px', fontSize: '22px', fontWeight: '700' }}>{children}</h1>,
     h2: ({ children }) => <h2 style={{ color: 'var(--primary)', marginTop: '24px', marginBottom: '12px', fontSize: '20px', fontWeight: '700' }}>{children}</h2>,
@@ -278,9 +253,7 @@ const Session = () => {
     return (
       <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
         <div className="card">
-          <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Session not found
-          </p>
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Session not found</p>
         </div>
       </div>
     );
@@ -293,6 +266,7 @@ const Session = () => {
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ position: 'relative' }}>
+        {/* Hamburger toggle */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           style={{
@@ -318,27 +292,22 @@ const Session = () => {
           {sidebarOpen ? '✕' : '☰'}
         </button>
 
+        {/* Backdrop */}
         {sidebarOpen && (
           <div
             style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.5)',
-              zIndex: 999,
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)', zIndex: 999,
               backdropFilter: 'blur(2px)'
             }}
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        <div className="card card-elevated" style={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-          color: 'white', 
-          marginBottom: '24px',
-          border: 'none'
+        {/* Header */}
+        <div className="card card-elevated" style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white', marginBottom: '24px', border: 'none'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
             <div>
@@ -349,20 +318,15 @@ const Session = () => {
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>Tutor Mode</div>
-              <select 
+              <select
                 value={tutorMode}
                 onChange={(e) => changeTutorMode(e.target.value)}
                 style={{
-                  padding: '6px 12px',
-                  borderRadius: '8px',
+                  padding: '6px 12px', borderRadius: '8px',
                   border: '2px solid rgba(255,255,255,0.8)',
-                  background: 'rgba(255,255,255,0.25)',
-                  color: 'white',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  WebkitAppearance: 'none',
-                  appearance: 'none'
+                  background: 'rgba(255,255,255,0.25)', color: 'white',
+                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  WebkitAppearance: 'none', appearance: 'none'
                 }}
               >
                 <option value="chill_friend" style={{ background: '#4F46E5', color: 'white' }}>😎 Chill Friend</option>
@@ -374,207 +338,195 @@ const Session = () => {
           </div>
         </div>
 
-        <ProgressBar 
-          current={completedCount} 
-          total={checkpoints.length} 
-          label="Overall Progress" 
-        />
+        <ProgressBar current={completedCount} total={checkpoints.length} label="Overall Progress" />
 
-        {/* Show completion button if all checkpoints done */}
+        {/* Completion banner */}
         {canComplete && (
-          <div className="card" style={{ 
-            marginTop: '24px',
-            marginBottom: '24px',
+          <div className="card" style={{
+            marginTop: '24px', marginBottom: '24px',
             background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-            color: 'white',
-            textAlign: 'center',
-            border: 'none'
+            color: 'white', textAlign: 'center', border: 'none'
           }}>
             <h3 style={{ margin: '0 0 12px 0' }}>🎉 All Checkpoints Completed!</h3>
             <p style={{ margin: '0 0 16px 0', opacity: 0.9 }}>
               Congratulations! You've mastered all the checkpoints. Complete your session to earn bonus XP!
             </p>
-            <button 
+            <button
               onClick={handleCompleteSession}
               className="btn"
-              style={{
-                background: 'white',
-                color: '#11998e',
-                fontWeight: '700',
-                fontSize: '16px',
-                padding: '14px 32px'
-              }}
+              style={{ background: 'white', color: '#11998e', fontWeight: '700', fontSize: '16px', padding: '14px 32px' }}
             >
-              🏆 Complete Session & Earn Bonus XP
+              🏆 Complete Session & View Results
             </button>
           </div>
         )}
 
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '1fr', 
-          gap: '24px', 
-          marginTop: '24px',
-          position: 'relative'
-        }}>
-          <div
-            className="checkpoint-sidebar"
-            style={{
-              position: 'fixed',
-              left: sidebarOpen ? '0' : '-300px',
-              top: '0',
-              bottom: '0',
-              width: '280px',
-              background: 'var(--surface)',
-              boxShadow: sidebarOpen ? '4px 0 12px rgba(0,0,0,0.1)' : 'none',
-              zIndex: 1000,
-              transition: 'left 0.3s ease',
-              overflowY: 'auto',
-              padding: '80px 20px 20px 20px'
-            }}
-          >
-            <div className="card">
-              <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>📚 Checkpoints</h3>
-              <ul className="checkpoint-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {checkpoints.map((cp, idx) => {
-                  const isLocked = idx > 0 && checkpoints[idx - 1].status !== 'completed';
-                  const isCached = !!contentCache[cp.id];
-                  
-                  return (
-                    <li
-                      key={cp.id}
-                      className={`checkpoint-item 
-                        ${cp.status === 'completed' ? 'completed' : ''} 
-                        ${currentCheckpoint?.id === cp.id ? 'current' : ''}
-                        ${isLocked ? 'locked' : ''}`}
-                      onClick={() => handleCheckpointClick(cp)}
-                      style={{ 
-                        cursor: isLocked ? 'not-allowed' : 'pointer',
-                        padding: '12px',
-                        marginBottom: '8px',
-                        borderRadius: 'var(--radius)',
-                        background: currentCheckpoint?.id === cp.id ? 'var(--surface-elevated)' : 'transparent',
-                        border: currentCheckpoint?.id === cp.id ? '2px solid var(--primary)' : '2px solid transparent',
-                        transition: 'all 0.2s ease',
-                        pointerEvents: isLocked ? 'none' : 'auto'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: '600', flex: 1 }}>
-                          {cp.status === 'completed' && '✓ '}
-                          {isLocked && '🔒 '}
-                          {isCached && !isLocked && cp.status !== 'completed' && '📖 '}
-                          {idx + 1}. {cp.topic.substring(0, 25)}
-                          {cp.topic.length > 25 && '...'}
-                        </span>
-                        {cp.understanding_score && (
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            {Math.round(cp.understanding_score * 100)}%
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-
-          <div style={{ marginLeft: '0' }}>
-            {loadingContent && (
-              <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
-                <div className="loading-spinner" style={{ margin: '0 auto 20px' }}></div>
-                <p style={{ color: 'var(--text-secondary)' }}>Loading content...</p>
-              </div>
-            )}
-
-            {!loadingContent && currentCheckpoint && currentContent && (
-              <>
-                <div className="card fade-in" style={{ marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
-                    <h2 style={{ color: 'var(--primary)', margin: 0 }}>
-                      {currentCheckpoint.topic}
-                    </h2>
-                    {isTyping && (
-                      <button 
-                        onClick={skipTyping}
-                        className="btn btn-secondary btn-icon"
-                        title="Skip typing animation"
-                      >
-                        ⏩
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div style={{ 
-                    background: 'var(--surface-elevated)', 
-                    padding: '20px', 
-                    borderRadius: 'var(--radius)', 
-                    marginBottom: '24px',
-                    border: '2px solid var(--border)'
-                  }}>
-                    <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>🎯 Learning Objectives:</h4>
-                    <ul style={{ marginLeft: '20px' }}>
-                      {currentCheckpoint.objectives?.map((obj, idx) => (
-                        <li key={idx} style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}>
-                          {obj}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {displayedText && (
-                    <div style={{ color: 'var(--text-primary)', fontSize: '15px' }}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {displayedText}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-
-                  {mnemonics.length > 0 && !isTyping && (
-                    <div className="mnemonic-card" style={{ 
-                      marginTop: '24px',
-                      padding: '16px',
-                      background: 'var(--surface-elevated)',
+        {/* Sidebar */}
+        <div
+          className="checkpoint-sidebar"
+          style={{
+            position: 'fixed', left: sidebarOpen ? '0' : '-300px',
+            top: '0', bottom: '0', width: '280px',
+            background: 'var(--surface)',
+            boxShadow: sidebarOpen ? '4px 0 12px rgba(0,0,0,0.1)' : 'none',
+            zIndex: 1000, transition: 'left 0.3s ease',
+            overflowY: 'auto', padding: '80px 20px 20px 20px'
+          }}
+        >
+          <div className="card">
+            <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>📚 Checkpoints</h3>
+            <ul className="checkpoint-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {checkpoints.map((cp, idx) => {
+                const isLocked = idx > 0 && checkpoints[idx - 1].status !== 'completed';
+                const isCached = !!contentCache[cp.id];
+                return (
+                  <li
+                    key={cp.id}
+                    className={`checkpoint-item ${cp.status === 'completed' ? 'completed' : ''} ${currentCheckpoint?.id === cp.id ? 'current' : ''} ${isLocked ? 'locked' : ''}`}
+                    onClick={() => handleCheckpointClick(cp)}
+                    style={{
+                      cursor: isLocked ? 'not-allowed' : 'pointer',
+                      padding: '12px', marginBottom: '8px',
                       borderRadius: 'var(--radius)',
-                      border: '2px solid var(--primary)'
-                    }}>
-                      <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>💡 Memory Aids & Tips</h4>
-                      {mnemonics.map((mnemonic, idx) => (
-                        <p key={idx} style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}>
-                          • {mnemonic}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="card" style={{ textAlign: 'center' }}>
-                  <button 
-                    onClick={handleStartQuiz}
-                    className="btn btn-primary"
-                    style={{ fontSize: '16px', padding: '14px 32px' }}
-                    disabled={isTyping || loadingContent}
+                      background: currentCheckpoint?.id === cp.id ? 'var(--surface-elevated)' : 'transparent',
+                      border: currentCheckpoint?.id === cp.id ? '2px solid var(--primary)' : '2px solid transparent',
+                      transition: 'all 0.2s ease',
+                      pointerEvents: isLocked ? 'none' : 'auto'
+                    }}
                   >
-                    {isTyping ? 'Please wait...' : '✅ Ready for Quiz'}
-                  </button>
-                  {isTyping && (
-                    <p style={{ marginTop: '12px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Reading the lesson...
-                    </p>
-                  )}
-                </div>
-              </>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: '600', flex: 1 }}>
+                        {cp.status === 'completed' && '✓ '}
+                        {isLocked && '🔒 '}
+                        {isCached && !isLocked && cp.status !== 'completed' && '📖 '}
+                        {idx + 1}. {cp.topic.substring(0, 25)}{cp.topic.length > 25 && '...'}
+                      </span>
+                      {cp.understanding_score && (
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          {Math.round(cp.understanding_score * 100)}%
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Completion page button in sidebar */}
+            {canComplete && (
+              <button
+                onClick={() => { setSidebarOpen(false); handleCompleteSession(); }}
+                style={{
+                  width: '100%', marginTop: '16px', padding: '14px',
+                  background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+                  color: 'white', border: 'none', borderRadius: 'var(--radius)',
+                  fontWeight: '700', fontSize: '15px', cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(17,153,142,0.3)'
+                }}
+              >
+                🏆 View Completion Page
+              </button>
             )}
 
-            {!loadingContent && !currentCheckpoint && (
-              <div className="card">
-                <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px' }}>
-                  Click the menu button to select a checkpoint
-                </p>
-              </div>
+            {/* If session already completed, show link */}
+            {session?.status === 'completed' && (
+              <button
+                onClick={() => { setSidebarOpen(false); navigate(`/completion/${id}`); }}
+                style={{
+                  width: '100%', marginTop: '16px', padding: '14px',
+                  background: 'linear-gradient(135deg, #4392F1 0%, #6BA3F5 100%)',
+                  color: 'white', border: 'none', borderRadius: 'var(--radius)',
+                  fontWeight: '700', fontSize: '15px', cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(67,146,241,0.3)'
+                }}
+              >
+                🎉 View Completion Page
+              </button>
             )}
           </div>
+        </div>
+
+        {/* Main content */}
+        <div style={{ marginLeft: '0', marginTop: '24px' }}>
+          {loadingContent && (
+            <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
+              <div className="loading-spinner" style={{ margin: '0 auto 20px' }}></div>
+              <p style={{ color: 'var(--text-secondary)' }}>Loading content...</p>
+            </div>
+          )}
+
+          {!loadingContent && currentCheckpoint && currentContent && (
+            <>
+              <div className="card fade-in" style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
+                  <h2 style={{ color: 'var(--primary)', margin: 0 }}>{currentCheckpoint.topic}</h2>
+                  {isTyping && (
+                    <button onClick={skipTyping} className="btn btn-secondary btn-icon" title="Skip typing animation">
+                      ⏩
+                    </button>
+                  )}
+                </div>
+
+                <div style={{
+                  background: 'var(--surface-elevated)', padding: '20px',
+                  borderRadius: 'var(--radius)', marginBottom: '24px',
+                  border: '2px solid var(--border)'
+                }}>
+                  <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>🎯 Learning Objectives:</h4>
+                  <ul style={{ marginLeft: '20px' }}>
+                    {currentCheckpoint.objectives?.map((obj, idx) => (
+                      <li key={idx} style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}>{obj}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                {displayedText && (
+                  <div style={{ color: 'var(--text-primary)', fontSize: '15px' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      {displayedText}
+                    </ReactMarkdown>
+                  </div>
+                )}
+
+                {mnemonics.length > 0 && !isTyping && (
+                  <div className="mnemonic-card" style={{
+                    marginTop: '24px', padding: '16px',
+                    background: 'var(--surface-elevated)', borderRadius: 'var(--radius)',
+                    border: '2px solid var(--primary)'
+                  }}>
+                    <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>💡 Memory Aids & Tips</h4>
+                    {mnemonics.map((mnemonic, idx) => (
+                      <p key={idx} style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}>• {mnemonic}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="card" style={{ textAlign: 'center' }}>
+                <button
+                  onClick={handleStartQuiz}
+                  className="btn btn-primary"
+                  style={{ fontSize: '16px', padding: '14px 32px' }}
+                  disabled={isTyping || loadingContent}
+                >
+                  {isTyping ? 'Please wait...' : '✅ Ready for Quiz'}
+                </button>
+                {isTyping && (
+                  <p style={{ marginTop: '12px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                    Reading the lesson...
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {!loadingContent && !currentCheckpoint && (
+            <div className="card">
+              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px' }}>
+                Click the menu button to select a checkpoint
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

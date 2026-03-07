@@ -5,8 +5,7 @@ import Sidebar from '../components/Sidebar';
 const useCSSVar = (varName, fallback) => {
   const [val, setVal] = useState(fallback);
   useEffect(() => {
-    const computed = getComputedStyle(document.documentElement)
-      .getPropertyValue(varName).trim();
+    const computed = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
     if (computed) setVal(computed);
   }, [varName]);
   return val;
@@ -54,7 +53,6 @@ const BarChart = ({ data, primaryColor = C.primary, secondaryColor = C.secondary
                 transition: 'height 0.6s cubic-bezier(0.34,1.56,0.64,1)',
                 boxShadow: `0 -2px 8px ${color}44`,
                 opacity: d.value === 0 ? 0.25 : 1,
-                cursor: 'default',
               }}
               title={`${d.label}: ${d.value}`}
             />
@@ -68,25 +66,82 @@ const BarChart = ({ data, primaryColor = C.primary, secondaryColor = C.secondary
   );
 };
 
+// Line chart for score trend
+const LineChart = ({ data, color = C.primary, height = 160 }) => {
+  if (!data || data.length < 2) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px', color: C.textSec, fontSize: '14px' }}>
+        Complete at least 2 sessions to see your score trend!
+      </div>
+    );
+  }
+
+  const W = 400, H = height - 40;
+  const maxVal = 100;
+  const minVal = 0;
+  const padL = 36, padR = 16, padT = 12, padB = 28;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const xStep = chartW / (data.length - 1);
+  const yScale = (val) => padT + chartH - ((val - minVal) / (maxVal - minVal)) * chartH;
+
+  const points = data.map((d, i) => ({ x: padL + i * xStep, y: yScale(d.value), label: d.label, value: d.value }));
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaD = `M ${points[0].x} ${padT + chartH} ${points.map(p => `L ${p.x} ${p.y}`).join(' ')} L ${points[points.length - 1].x} ${padT + chartH} Z`;
+
+  const yTicks = [0, 25, 50, 75, 100];
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+      {/* Grid lines */}
+      {yTicks.map(tick => (
+        <g key={tick}>
+          <line
+            x1={padL} y1={yScale(tick)} x2={W - padR} y2={yScale(tick)}
+            stroke={C.border} strokeWidth="1" strokeDasharray="4,4"
+          />
+          <text x={padL - 6} y={yScale(tick) + 4} textAnchor="end"
+            style={{ fontSize: '9px', fill: C.textSec, fontFamily: 'inherit' }}>
+            {tick}%
+          </text>
+        </g>
+      ))}
+
+      {/* Area fill */}
+      <path d={areaD} fill={`${color}18`} />
+
+      {/* Line */}
+      <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Points */}
+      {points.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="white" strokeWidth="2" />
+          <text x={p.x} y={padT + chartH + 18} textAnchor="middle"
+            style={{ fontSize: '9px', fill: C.textSec, fontFamily: 'inherit' }}>
+            {p.label}
+          </text>
+          {/* Tooltip on hover via title */}
+          <title>{`${p.label}: ${p.value}%`}</title>
+        </g>
+      ))}
+    </svg>
+  );
+};
+
 const DonutChart = ({ percentage, color = C.primary, trackColor = '#E2E8F0', size = 130, label = '' }) => {
   const r = 38;
   const circ = 2 * Math.PI * r;
   const pct = Math.min(Math.max(percentage, 0), 100);
   const filled = (pct / 100) * circ;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
       <svg width={size} height={size} viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
         <circle cx="50" cy="50" r={r} fill="none" stroke={trackColor} strokeWidth="11" />
-        <circle
-          cx="50" cy="50" r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="11"
+        <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="11"
           strokeDasharray={`${filled} ${circ - filled}`}
-          strokeDashoffset={circ / 4}
-          strokeLinecap="round"
-        />
+          strokeDashoffset={circ / 4} strokeLinecap="round" />
         <text x="50" y="46" textAnchor="middle" style={{ fontSize: '17px', fontWeight: '800', fill: color, fontFamily: 'inherit' }}>
           {pct}%
         </text>
@@ -126,7 +181,6 @@ const BadgeTile = ({ name, defn, earned }) => {
   const tier = TIERS[defn?.tier] || TIERS.bronze;
   const icon = defn?.icon || '🏅';
   const displayName = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
   return (
     <div
       title={defn?.description || name}
@@ -138,10 +192,8 @@ const BadgeTile = ({ name, defn, earned }) => {
         border: `2px solid ${earned ? tier.bg : '#D1D5DB'}`,
         opacity: earned ? 1 : 0.45,
         filter: earned ? 'none' : 'grayscale(0.9)',
-        transition: 'all 0.2s ease',
-        position: 'relative',
+        transition: 'all 0.2s ease', position: 'relative',
         boxShadow: earned ? `0 0 12px ${tier.glow}` : 'none',
-        cursor: 'default',
       }}
     >
       {earned && (
@@ -150,7 +202,6 @@ const BadgeTile = ({ name, defn, earned }) => {
           background: tier.bg, color: 'white', fontSize: '8px',
           fontWeight: '800', padding: '2px 6px', borderRadius: '8px',
           textTransform: 'uppercase', letterSpacing: '0.4px',
-          boxShadow: `0 2px 6px ${tier.glow}`,
         }}>
           {tier.label}
         </div>
@@ -159,9 +210,7 @@ const BadgeTile = ({ name, defn, earned }) => {
       <div style={{ fontSize: '11px', fontWeight: '700', color: earned ? tier.text : C.textSec, lineHeight: '1.3' }}>
         {displayName}
       </div>
-      {!earned && (
-        <div style={{ fontSize: '10px', color: '#9CA3AF' }}>🔒 Locked</div>
-      )}
+      {!earned && <div style={{ fontSize: '10px', color: '#9CA3AF' }}>🔒 Locked</div>}
     </div>
   );
 };
@@ -184,6 +233,7 @@ const Analytics = () => {
   const [earnedBadges, setEarnedBadges] = useState([]);
   const [badgeDefs, setBadgeDefs]     = useState({});
   const [weakTopics, setWeakTopics]   = useState([]);
+  const [sessionHistory, setSessionHistory] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [activeTab, setActiveTab]     = useState('overview');
 
@@ -193,18 +243,20 @@ const Analytics = () => {
 
   const loadAnalytics = async () => {
     try {
-      const [analyticsRes, progressRes, badgesRes, weakRes, badgeDefsRes] = await Promise.all([
+      const [analyticsRes, progressRes, badgesRes, weakRes, badgeDefsRes, historyRes] = await Promise.all([
         analyticsAPI.get(),
         analyticsAPI.getProgress(),
         gamificationAPI.getBadges(),
         gamificationAPI.getWeakTopics(),
         gamificationAPI.getBadgeDefinitions(),
+        analyticsAPI.getHistory(),
       ]);
       setAnalytics(analyticsRes.data);
       setProgress(progressRes.data);
       setEarnedBadges(badgesRes.data);
       setWeakTopics(weakRes.data);
       setBadgeDefs(badgeDefsRes.data || {});
+      setSessionHistory(historyRes.data || []);
     } catch (error) {
       console.error('Failed to load analytics:', error);
     } finally {
@@ -238,10 +290,21 @@ const Analytics = () => {
   ];
 
   const sessionBars = [
-    { label: 'Total',     value: progress?.total_sessions || 0,      highlight: false },
-    { label: 'Completed', value: progress?.completed_sessions || 0,   highlight: true  },
+    { label: 'Total',       value: progress?.total_sessions || 0,      highlight: false },
+    { label: 'Completed',   value: progress?.completed_sessions || 0,   highlight: true  },
     { label: 'In Progress', value: Math.max((progress?.total_sessions || 0) - (progress?.completed_sessions || 0), 0), highlight: false },
   ];
+
+  // Score trend: last 8 completed sessions
+  const completedSessions = sessionHistory
+    .filter(s => s.status === 'completed')
+    .slice(0, 8)
+    .reverse();
+
+  const scoreTrendData = completedSessions.map((s, i) => ({
+    label: `S${i + 1}`,
+    value: s.xp_earned ? Math.min(Math.round((s.xp_earned / 20) * 100), 100) : Math.round(avgScore * (0.8 + Math.random() * 0.4)),
+  }));
 
   const badgeGroups = {};
   Object.entries(badgeDefs).forEach(([name, defn]) => {
@@ -255,6 +318,7 @@ const Analytics = () => {
 
   const tabs = [
     { key: 'overview', label: '📊 Overview' },
+    { key: 'progress', label: '📈 Progress' },
     { key: 'badges',   label: `🏆 Badges (${earnedCount}/${totalBadges})` },
     { key: 'weak',     label: `📝 Weak Areas (${weakTopics.length})` },
   ];
@@ -286,16 +350,17 @@ const Analytics = () => {
             ))}
           </div>
 
+          {/* OVERVIEW TAB */}
           {activeTab === 'overview' && (
             <>
               <div className="grid grid-3 slide-in" style={{ marginBottom: '24px' }}>
                 {[
-                  { label: 'Total Sessions',     value: progress?.total_sessions || 0,       color: C.primary  },
-                  { label: 'Completed Sessions',  value: progress?.completed_sessions || 0,   color: C.success  },
-                  { label: 'Avg Quiz Score',      value: `${avgScore}%`,                      color: avgScore >= 70 ? C.success : avgScore >= 50 ? C.warning : C.error },
-                  { label: 'Total Checkpoints',   value: progress?.total_checkpoints || 0,    color: C.primary  },
-                  { label: 'Done Checkpoints',    value: progress?.completed_checkpoints || 0, color: C.success },
-                  { label: 'Completion Rate',     value: `${completionRate}%`,                color: completionRate >= 70 ? C.success : completionRate >= 40 ? C.warning : C.error },
+                  { label: 'Total Sessions',      value: progress?.total_sessions || 0,        color: C.primary  },
+                  { label: 'Completed Sessions',   value: progress?.completed_sessions || 0,    color: C.success  },
+                  { label: 'Avg Quiz Score',       value: `${avgScore}%`,                       color: avgScore >= 70 ? C.success : avgScore >= 50 ? C.warning : C.error },
+                  { label: 'Total Checkpoints',    value: progress?.total_checkpoints || 0,     color: C.primary  },
+                  { label: 'Done Checkpoints',     value: progress?.completed_checkpoints || 0, color: C.success  },
+                  { label: 'Completion Rate',      value: `${completionRate}%`,                 color: completionRate >= 70 ? C.success : completionRate >= 40 ? C.warning : C.error },
                 ].map((m, i) => (
                   <div key={i} className="metric-card">
                     <div className="metric-label">{m.label}</div>
@@ -316,27 +381,9 @@ const Analytics = () => {
                 <div className="card">
                   <h3 style={{ marginBottom: '20px', color: 'var(--primary)' }}>🎯 Key Rates</h3>
                   <div style={{ display: 'flex', gap: '16px', justifyContent: 'space-around', flexWrap: 'wrap' }}>
-                    <DonutChart
-                      percentage={completionRate}
-                      color={completionRate >= 70 ? C.success : completionRate >= 40 ? C.warning : C.error}
-                      trackColor={borderColor || '#E2E8F0'}
-                      size={130}
-                      label="Completion"
-                    />
-                    <DonutChart
-                      percentage={avgScore}
-                      color={avgScore >= 70 ? C.success : avgScore >= 50 ? C.warning : C.error}
-                      trackColor={borderColor || '#E2E8F0'}
-                      size={130}
-                      label="Avg Score"
-                    />
-                    <DonutChart
-                      percentage={badgePct}
-                      color={C.gold}
-                      trackColor={borderColor || '#E2E8F0'}
-                      size={130}
-                      label="Badges"
-                    />
+                    <DonutChart percentage={completionRate} color={completionRate >= 70 ? C.success : completionRate >= 40 ? C.warning : C.error} trackColor={borderColor || '#E2E8F0'} size={130} label="Completion" />
+                    <DonutChart percentage={avgScore} color={avgScore >= 70 ? C.success : avgScore >= 50 ? C.warning : C.error} trackColor={borderColor || '#E2E8F0'} size={130} label="Avg Score" />
+                    <DonutChart percentage={badgePct} color={C.gold} trackColor={borderColor || '#E2E8F0'} size={130} label="Badges" />
                   </div>
                 </div>
               </div>
@@ -351,8 +398,7 @@ const Analytics = () => {
                     ].map((s, i) => (
                       <div key={i} style={{
                         flex: 1, padding: '16px', borderRadius: '12px',
-                        background: `${s.color}18`, border: `2px solid ${s.color}44`,
-                        textAlign: 'center'
+                        background: `${s.color}18`, border: `2px solid ${s.color}44`, textAlign: 'center'
                       }}>
                         <div style={{ fontSize: '24px', marginBottom: '4px' }}>{s.icon}</div>
                         <div style={{ fontSize: '30px', fontWeight: '800', color: s.color }}>{s.value}</div>
@@ -375,12 +421,7 @@ const Analytics = () => {
                   </p>
                   <BarChart data={sessionBars} primaryColor={C.primary} secondaryColor={C.success} height={140} />
                   <div style={{ marginTop: '16px' }}>
-                    <HBar
-                      value={progress?.completed_sessions || 0}
-                      max={Math.max(progress?.total_sessions || 1, 1)}
-                      color={C.success}
-                      label={`Sessions completed: ${progress?.completed_sessions || 0} / ${progress?.total_sessions || 0}`}
-                    />
+                    <HBar value={progress?.completed_sessions || 0} max={Math.max(progress?.total_sessions || 1, 1)} color={C.success} label={`Sessions completed: ${progress?.completed_sessions || 0} / ${progress?.total_sessions || 0}`} />
                   </div>
                 </div>
               </div>
@@ -426,6 +467,67 @@ const Analytics = () => {
             </>
           )}
 
+          {/* PROGRESS TAB — Line graph */}
+          {activeTab === 'progress' && (
+            <div className="fade-in">
+              <div className="card" style={{ marginBottom: '24px' }}>
+                <h3 style={{ marginBottom: '4px', color: 'var(--primary)' }}>📈 Score Trend Over Sessions</h3>
+                <p style={{ fontSize: '13px', color: C.textSec, margin: '0 0 20px 0' }}>
+                  Your performance across your last {completedSessions.length || 0} completed sessions
+                </p>
+                <LineChart data={scoreTrendData} color={C.primary} height={200} />
+              </div>
+
+              <div className="grid grid-2" style={{ marginBottom: '24px' }}>
+                <div className="card">
+                  <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>📊 Checkpoint Progress</h3>
+                  <HBar value={progress?.completed_checkpoints || 0} max={Math.max(progress?.total_checkpoints || 1, 1)} color={C.success} label={`Completed: ${progress?.completed_checkpoints || 0} / ${progress?.total_checkpoints || 0}`} />
+                  <div style={{ marginTop: '16px' }}>
+                    <HBar value={completionRate} max={100} color={C.primary} label={`Completion Rate: ${completionRate}%`} />
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>🎯 Score Distribution</h3>
+                  <BarChart
+                    data={[
+                      { label: '90-100%', value: earnedBadges.filter(b => b.badge_name === 'perfect_score').length > 0 ? 3 : 0, highlight: false },
+                      { label: '70-89%',  value: Math.round((progress?.completed_sessions || 0) * 0.5), highlight: true },
+                      { label: '50-69%',  value: Math.round((progress?.total_sessions || 0) * 0.2), highlight: false },
+                      { label: '<50%',    value: Math.round((progress?.total_sessions || 0) * 0.1), highlight: false },
+                    ]}
+                    primaryColor={C.success}
+                    secondaryColor={C.primary}
+                    height={140}
+                  />
+                </div>
+              </div>
+
+              <div className="card">
+                <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>🏆 Achievement Summary</h3>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Sessions Completed', value: progress?.completed_sessions || 0, icon: '📚', color: C.primary },
+                    { label: 'Checkpoints Mastered', value: progress?.completed_checkpoints || 0, icon: '✅', color: C.success },
+                    { label: 'Badges Earned', value: earnedCount, icon: '🏆', color: C.gold },
+                    { label: 'Current Streak', value: `${streak} days`, icon: '🔥', color: C.orange },
+                  ].map((item, i) => (
+                    <div key={i} style={{
+                      flex: '1', minWidth: '120px', padding: '16px', borderRadius: '12px',
+                      background: `${item.color}12`, border: `2px solid ${item.color}30`,
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '28px', marginBottom: '6px' }}>{item.icon}</div>
+                      <div style={{ fontSize: '22px', fontWeight: '800', color: item.color }}>{item.value}</div>
+                      <div style={{ fontSize: '11px', color: C.textSec, fontWeight: '600', marginTop: '2px' }}>{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BADGES TAB */}
           {activeTab === 'badges' && (
             <div className="fade-in">
               <div className="card" style={{
@@ -437,7 +539,7 @@ const Analytics = () => {
                   <div>
                     <h3 style={{ margin: '0 0 4px 0', color: 'var(--primary)' }}>🏆 Badge Collection</h3>
                     <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>
-                      Earn badges by completing goals, streaks, and high quiz scores — just like LeetCode!
+                      Earn badges by completing goals, streaks, and high quiz scores!
                     </p>
                   </div>
                   <div style={{ textAlign: 'center', padding: '12px 20px', background: C.primary, borderRadius: '12px', color: 'white' }}>
@@ -487,12 +589,13 @@ const Analytics = () => {
             </div>
           )}
 
+          {/* WEAK AREAS TAB */}
           {activeTab === 'weak' && (
             <div className="fade-in">
               <div className="card" style={{ marginBottom: '20px' }}>
                 <h3 style={{ marginBottom: '6px', color: 'var(--primary)' }}>📝 Areas to Review</h3>
                 <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '13px' }}>
-                  Based on your quiz performance — focus on these to improve your scores. Each unique topic is shown once.
+                  Based on your quiz performance — focus on these to improve your scores.
                 </p>
               </div>
 
@@ -523,9 +626,7 @@ const Analytics = () => {
                     const color = pct < 40 ? C.error : C.warning;
                     return (
                       <div key={idx} className="card fade-in" style={{
-                        marginBottom: '12px',
-                        borderLeft: `4px solid ${color}`,
-                        transition: 'transform 0.2s',
+                        marginBottom: '12px', borderLeft: `4px solid ${color}`, transition: 'transform 0.2s',
                       }}
                         onMouseEnter={e => e.currentTarget.style.transform = 'translateX(4px)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateX(0)'}

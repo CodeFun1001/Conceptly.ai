@@ -145,23 +145,10 @@ const Feynman = () => {
                 border: 'none'
               }}
             >
-              🎯 Try Again — New Questions on Weak Topics
+              🎯 Try Again
             </button>
           )}
 
-          <button 
-            onClick={() => navigate(`/quiz/${sessionId}/${checkpointId}`)}
-            className="btn btn-primary"
-            style={{ 
-              width: '100%', 
-              fontSize: '16px', 
-              padding: '16px',
-              justifyContent: 'center'
-            }}
-          >
-            🔁 Retry Full Quiz
-          </button>
-          
           <button 
             onClick={handleDifferentApproach}
             className="btn btn-secondary"
