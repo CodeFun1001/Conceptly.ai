@@ -84,7 +84,7 @@ export const gamificationAPI = {
   completeChallenge: (id) => api.post(`/gamification/daily-challenge/${id}/complete`),
   createNote: (data) => api.post('/gamification/notes', data),
   getNotes: (sessionId) => api.get(`/gamification/notes/${sessionId}`),
-  generateSmartNotes: (sessionId) => api.post(`/gamification/notes/${sessionId}/generate`)
+  generateSmartNotes: (sessionId, notesType = 'comprehensive') => api.post(`/gamification/notes/${sessionId}/generate?notes_type=${notesType}`)
 };
 
 export default api;

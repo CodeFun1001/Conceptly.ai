@@ -321,7 +321,12 @@ def get_notes(session_id: int, current_user: User = Depends(get_current_user), d
 
 
 @router.post("/notes/{session_id}/generate")
-def generate_smart_notes(session_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def generate_smart_notes(
+    session_id: int,
+    notes_type: str = "comprehensive",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     session = db.query(LearningSession).filter(
         LearningSession.id == session_id,
         LearningSession.user_id == current_user.id
@@ -330,11 +335,20 @@ def generate_smart_notes(session_id: int, current_user: User = Depends(get_curre
         raise HTTPException(status_code=404, detail="Session not found")
 
     checkpoints = db.query(Checkpoint).filter(Checkpoint.session_id == session.id).all()
-    checkpoint_data = [{"topic": cp.topic, "objectives": cp.objectives} for cp in checkpoints]
+    checkpoint_data = [
+        {"topic": cp.topic, "objectives": cp.objectives or [], "key_concepts": cp.key_concepts or [], "level": cp.level or "intermediate"}
+        for cp in checkpoints
+    ]
     weak_topics = db.query(WeakTopic).filter(WeakTopic.user_id == current_user.id).limit(5).all()
     weak_areas = [f"{wt.topic}: {wt.concept}" for wt in weak_topics]
 
-    notes_content = notes_generator.generate_comprehensive_notes(session.topic, checkpoint_data, weak_areas)
+    if notes_type == "cheatsheet":
+        notes_content = notes_generator.generate_cheat_sheet(session.topic, checkpoint_data)
+    elif notes_type == "questions":
+        notes_content = notes_generator.generate_practice_questions(session.topic, checkpoint_data)
+    else:
+        notes_content = notes_generator.generate_comprehensive_notes(session.topic, checkpoint_data, weak_areas)
+
     note = UserNote(user_id=current_user.id, session_id=session.id, content=notes_content)
     db.add(note)
     db.commit()
