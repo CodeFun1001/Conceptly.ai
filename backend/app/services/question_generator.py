@@ -1,26 +1,14 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 import json
 import re
+import os
 import hashlib
 from fractions import Fraction
-from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
-import os
-from dotenv import load_dotenv
+from app.llm import get_llm
 
-load_dotenv()
-
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.4,
-    api_key=os.getenv("GROQ_API_KEY")
-)
-
-llm_strict = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0.1,
-    api_key=os.getenv("GROQ_API_KEY")
-)
+llm = get_llm(temperature=0.4)
+llm_strict = get_llm(temperature=0.1)
 
 _question_history: Dict[str, set] = {}
 _question_text_history: Dict[str, List[str]] = {}
@@ -29,7 +17,7 @@ _question_text_history: Dict[str, List[str]] = {}
 def normalize_value(text):
     text = str(text).strip()
     try:
-        if '/' in text:
+        if "/" in text:
             return str(Fraction(text))
     except Exception:
         pass
@@ -63,19 +51,12 @@ def validate_single_correct(options, correct_answer):
 
 def _contains_placeholder(text: str) -> bool:
     bad_patterns = [
-        r'unrelated concept [a-z]',
-        r'alternative concept [a-z]',
-        r'option [a-z]$',
-        r'^[a-z]\)?\s*$',
-        r'concept [a-z]$',
-        r'incorrect option',
-        r'wrong answer [a-z]',
-        r'distractor [a-z]',
-        r'^core principle of .+$',
-        r'^the correct understanding of',
-        r'^a misapplication of',
-        r'^an outdated approach to',
-        r'^a common misconception about',
+        r"unrelated concept [a-z]", r"alternative concept [a-z]",
+        r"option [a-z]$", r"^[a-z]\)?\s*$", r"concept [a-z]$",
+        r"incorrect option", r"wrong answer [a-z]", r"distractor [a-z]",
+        r"^core principle of .+$", r"^the correct understanding of",
+        r"^a misapplication of", r"^an outdated approach to",
+        r"^a common misconception about",
     ]
     lower = text.lower().strip()
     for pat in bad_patterns:
@@ -85,13 +66,13 @@ def _contains_placeholder(text: str) -> bool:
 
 
 def _questions_are_similar(q1: str, q2: str, threshold: float = 0.6) -> bool:
-    """Check if two question texts are too similar using word overlap."""
-    words1 = set(re.sub(r'[^a-z0-9\s]', '', q1.lower()).split())
-    words2 = set(re.sub(r'[^a-z0-9\s]', '', q2.lower()).split())
-    # Remove very common words
-    stopwords = {'what', 'is', 'the', 'a', 'an', 'of', 'in', 'to', 'and', 'or',
-                 'are', 'which', 'how', 'does', 'do', 'can', 'that', 'this',
-                 'for', 'with', 'it', 'be', 'by', 'on', 'at'}
+    words1 = set(re.sub(r"[^a-z0-9\s]", "", q1.lower()).split())
+    words2 = set(re.sub(r"[^a-z0-9\s]", "", q2.lower()).split())
+    stopwords = {
+        "what", "is", "the", "a", "an", "of", "in", "to", "and", "or",
+        "are", "which", "how", "does", "do", "can", "that", "this",
+        "for", "with", "it", "be", "by", "on", "at",
+    }
     words1 -= stopwords
     words2 -= stopwords
     if not words1 or not words2:
@@ -120,7 +101,7 @@ def is_question_unique(checkpoint_id: int, question_text: str, session_id: int =
 
     for past_q in _question_text_history[key]:
         if _questions_are_similar(question_text, past_q):
-            print(f"   ⏭️  Similar question detected, skipping")
+            print("   Similar question detected, skipping")
             return False
 
     _question_history[key].add(sig)
@@ -141,23 +122,14 @@ def clear_question_history(session_id: int = None):
 
 
 def _call_llm_for_questions(
-    checkpoint: Dict,
-    context: str,
-    num_questions: int,
-    level: str,
-    tutor_mode: str,
-    weak_areas: List[str],
-    attempt_number: int,
-    uniqueness_seed: str,
-    used_concepts: set,
-    use_strict: bool = False,
+    checkpoint, context, num_questions, level, tutor_mode,
+    weak_areas, attempt_number, uniqueness_seed, used_concepts, use_strict=False,
 ) -> List[Dict]:
-
-    topic = checkpoint.get('topic', 'the topic')
+    topic = checkpoint.get("topic", "the topic")
     objectives_text = "\n".join(
-        f"  {i+1}. {obj}" for i, obj in enumerate(checkpoint.get('objectives', []))
+        f"  {i+1}. {obj}" for i, obj in enumerate(checkpoint.get("objectives", []))
     )
-    key_concepts = checkpoint.get('key_concepts', [])
+    key_concepts = checkpoint.get("key_concepts", [])
     concepts_text = ", ".join(key_concepts) if key_concepts else topic
 
     weak_focus = ""
@@ -170,37 +142,28 @@ def _call_llm_for_questions(
 
     already_used = ""
     if used_concepts:
-        already_used = f"\nALREADY TESTED CONCEPTS (do NOT repeat these): {', '.join(used_concepts)}\n"
+        already_used = f"\nALREADY TESTED CONCEPTS (do NOT repeat): {', '.join(used_concepts)}\n"
 
     tutor_personalities = {
-        "chill_friend": "Use a casual, approachable tone.",
-        "strict_mentor": "Be academically rigorous and precise.",
-        "supportive_buddy": "Use an encouraging, warm tone.",
-        "exam_mode": "Use formal exam-style wording.",
+        "chill_friend":    "Use a casual, approachable tone.",
+        "strict_mentor":   "Be academically rigorous and precise.",
+        "supportive_buddy":"Use an encouraging, warm tone.",
+        "exam_mode":       "Use formal exam-style wording.",
     }
     personality = tutor_personalities.get(tutor_mode, tutor_personalities["supportive_buddy"])
 
     system_content = f"""You are an expert quiz designer. {personality}
 
-ABSOLUTE RULES — violating any disqualifies the entire response:
-1. Return ONLY a raw JSON array. No markdown, no ```json, no explanation.
+ABSOLUTE RULES:
+1. Return ONLY a raw JSON array. No markdown, no explanation.
 2. Every question must be directly answerable from the TAUGHT CONTENT below.
-3. Each question tests a DIFFERENT concept — no two questions on the same idea.
+3. Each question tests a DIFFERENT concept.
 4. Every question has EXACTLY 4 options.
 5. ONLY ONE option is correct.
-6. "correct_answer" must be the EXACT full text of one of the options — never a letter.
-7. ALL 4 options MUST be specific, factually grounded statements about "{topic}".
-   FORBIDDEN option styles (instant fail):
-     - "Unrelated concept A/B/C"
-     - "Alternative concept A/B/C"
-     - "Option A/B/C/D"
-     - "Core principle of X" (too vague)
-     - "The correct understanding of X"
-     - "A misapplication of X"
-     - Any option shorter than 6 words that is not a number/formula
-8. Wrong options must sound plausible — they should be common misconceptions or
-   related-but-incorrect facts about "{topic}" that a student might genuinely confuse.
-9. Every question must be UNIQUE and not similar to any previously asked questions.
+6. "correct_answer" must be the EXACT full text of one option.
+7. All 4 options must be specific, factually grounded statements about "{topic}".
+8. Wrong options must be plausible misconceptions or related-but-incorrect facts.
+9. Every question must be UNIQUE.
 
 Uniqueness seed: {uniqueness_seed}"""
 
@@ -220,52 +183,43 @@ Output format:
 [
   {{
     "question": "Specific factual question about {topic}?",
-    "options": [
-      "Specific plausible statement A about {topic}",
-      "Specific plausible statement B about {topic}",
-      "Specific plausible statement C about {topic}",
-      "Specific plausible statement D about {topic}"
-    ],
+    "options": ["A...", "B...", "C...", "D..."],
     "correct_answer": "Exact text of the correct option",
-    "explanation": "Why this is correct, referencing the topic",
+    "explanation": "Why this is correct",
     "difficulty": "{level}",
     "tested_concept": "Name of concept tested"
   }}
-]
+]"""
 
-REMEMBER: Wrong options must be realistic misconceptions about {topic}, NOT generic labels.
-IMPORTANT: Each question must test a completely different concept from the others."""
-
-    model = llm_strict if use_strict else llm
-    response = model.invoke([
+    active_llm = llm_strict if use_strict else llm
+    response = active_llm.invoke([
         SystemMessage(content=system_content),
         HumanMessage(content=human_content),
     ])
 
     raw = str(response.content).strip()
-    raw = re.sub(r'^```json\s*', '', raw)
-    raw = re.sub(r'^```\s*', '', raw)
-    raw = re.sub(r'\s*```$', '', raw)
-    raw = raw.strip()
+    raw = re.sub(r"^```json\s*", "", raw)
+    raw = re.sub(r"^```\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
 
-    parsed = json.loads(raw)
+    parsed = json.loads(raw.strip())
     if not isinstance(parsed, list):
         parsed = [parsed]
     return parsed
 
 
-def _validate_question(q: dict, checkpoint_id: int, session_id: int, concepts_used: set) -> dict | None:
+def _validate_question(q: dict, checkpoint_id: int, session_id: int, concepts_used: set):
     question_text = q.get("question", "").strip()
     if not question_text or len(question_text) < 10:
         return None
 
     if not is_question_unique(checkpoint_id, question_text, session_id):
-        print(f"   ⏭️  Duplicate question skipped")
+        print("   Duplicate question skipped")
         return None
 
     tested_concept = q.get("tested_concept", "").strip()
     if tested_concept and tested_concept in concepts_used:
-        print(f"   ⏭️  Repeated concept skipped: {tested_concept}")
+        print(f"   Repeated concept skipped: {tested_concept}")
         return None
 
     options = q.get("options", [])[:4]
@@ -278,13 +232,12 @@ def _validate_question(q: dict, checkpoint_id: int, session_id: int, concepts_us
 
     for opt in unique_options:
         if _contains_placeholder(opt):
-            print(f"   ❌ Placeholder option detected: '{opt}' — rejecting question")
+            print(f"   Placeholder option detected: '{opt}' — rejecting")
             return None
 
     correct = q.get("correct_answer", "").strip()
-
-    if correct.upper() in ['A', 'B', 'C', 'D']:
-        idx = {'A': 0, 'B': 1, 'C': 2, 'D': 3}[correct.upper()]
+    if correct.upper() in ["A", "B", "C", "D"]:
+        idx = {"A": 0, "B": 1, "C": 2, "D": 3}[correct.upper()]
         correct = unique_options[idx] if idx < len(unique_options) else unique_options[0]
 
     is_valid, matched = validate_single_correct(unique_options, correct)
@@ -301,7 +254,10 @@ def _validate_question(q: dict, checkpoint_id: int, session_id: int, concepts_us
         "question": question_text,
         "options": unique_options,
         "correct_answer": matched,
-        "explanation": q.get("explanation", f"This is the correct answer about {q.get('tested_concept', 'the topic')}."),
+        "explanation": q.get(
+            "explanation",
+            f"This is the correct answer about {q.get('tested_concept', 'the topic')}.",
+        ),
         "difficulty": q.get("difficulty", "intermediate"),
         "key_points": [tested_concept or question_text[:50]],
         "tested_concept": tested_concept or "General understanding",
@@ -317,17 +273,38 @@ def generate_questions(
     attempt_number: int = 0,
     session_id: int = None,
 ) -> List[Dict]:
+    checkpoint_id = checkpoint.get("id", 0)
+    topic         = checkpoint.get("topic", "the topic")
+    objectives    = checkpoint.get("objectives", [])
+    key_concepts  = checkpoint.get("key_concepts", [])
 
-    checkpoint_id = checkpoint.get('id', 0)
-    topic = checkpoint.get('topic', 'the topic')
-
-    print(f"📝 Generating questions — checkpoint {checkpoint_id}: {topic}")
+    print(f"Generating questions — checkpoint {checkpoint_id}: {topic}")
     print(f"   Mode: {tutor_mode} | Level: {level} | Attempt: {attempt_number}")
     if weak_areas:
         print(f"   Weak areas: {weak_areas}")
 
-    kc = len(checkpoint.get('key_concepts', []))
-    ob = len(checkpoint.get('objectives', []))
+    # Agentic RAG augmentation — always active
+    augmented_context = context
+    try:
+        from app.services.rag_service import build_rag_context, ensure_session_knowledge
+        if session_id:
+            ensure_session_knowledge(session_id, topic, objectives, key_concepts)
+            query = topic + " " + " ".join(key_concepts[:5])
+            augmented_context = build_rag_context(
+                base_context=context,
+                query=query,
+                session_id=session_id,
+                topic=topic,
+                objectives=objectives,
+                key_concepts=key_concepts,
+                max_extra_chars=1000,
+            )
+            print(f"question_generator: Agentic RAG applied for session {session_id}")
+    except Exception as e:
+        print(f"question_generator RAG error (non-fatal): {e}")
+
+    kc  = len(key_concepts)
+    ob  = len(objectives)
     complexity = kc + ob
 
     if complexity >= 12:
@@ -354,12 +331,12 @@ def generate_questions(
         if attempt_llm == 1 and len(validated) >= num_questions:
             break
         if attempt_llm == 1:
-            print(f"   🔄 Retrying with strict LLM (got {len(validated)}/{num_questions})")
+            print(f"   Retrying with strict LLM (got {len(validated)}/{num_questions})")
 
         try:
             raw_questions = _call_llm_for_questions(
                 checkpoint=checkpoint,
-                context=context,
+                context=augmented_context,
                 num_questions=num_questions + 2,
                 level=level,
                 tutor_mode=tutor_mode,
@@ -379,26 +356,29 @@ def generate_questions(
                     concepts_used.add(vq["tested_concept"])
 
         except Exception as e:
-            print(f"   ❌ LLM call {attempt_llm + 1} failed: {e}")
+            print(f"   LLM call {attempt_llm + 1} failed: {e}")
             import traceback; traceback.print_exc()
 
     if len(validated) >= num_questions:
-        print(f"✓ Generated {len(validated)} valid questions")
+        print(f"Generated {len(validated)} valid questions")
         return validated[:num_questions]
 
     shortage = num_questions - len(validated)
-    print(f"   ⚠️  Still short {shortage} questions — using targeted fallback LLM call")
-    fallback_qs = _llm_fallback(topic, context, shortage, level, concepts_used)
+    print(f"   Short {shortage} questions — using fallback LLM call")
+    fallback_qs = _llm_fallback(topic, augmented_context, shortage, level, concepts_used)
     validated.extend(fallback_qs)
 
-    print(f"✓ Final question count: {len(validated[:num_questions])}")
+    print(f"Final question count: {len(validated[:num_questions])}")
     return validated[:num_questions]
 
 
 def _llm_fallback(topic: str, context: str, num: int, level: str, concepts_used: set) -> List[Dict]:
     try:
         snippet = context[:2000] if context else f"The topic is {topic}."
-        already_used = f"Do NOT test these concepts (already covered): {', '.join(concepts_used)}" if concepts_used else ""
+        already_used = (
+            f"Do NOT test these (already covered): {', '.join(concepts_used)}"
+            if concepts_used else ""
+        )
         prompt = f"""Write {num} multiple-choice questions about "{topic}" based on this text:
 
 {snippet}
@@ -409,17 +389,17 @@ Rules:
 - Each question must have exactly 4 options
 - Only one option is correct
 - All 4 options must be full sentences about {topic}
-- Wrong options must be realistic misconceptions, NOT labels like "Option A" or "Unrelated concept"
-- Each question must test a DIFFERENT concept
+- Wrong options must be realistic misconceptions
+- Each question tests a DIFFERENT concept
 - Return only JSON array
 
 [{{"question": "...", "options": ["...", "...", "...", "..."], "correct_answer": "...", "explanation": "...", "tested_concept": "..."}}]"""
 
         response = llm_strict.invoke([HumanMessage(content=prompt)])
         raw = str(response.content).strip()
-        raw = re.sub(r'^```json\s*', '', raw)
-        raw = re.sub(r'^```\s*', '', raw)
-        raw = re.sub(r'\s*```$', '', raw)
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"^```\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
 
         parsed = json.loads(raw.strip())
         if not isinstance(parsed, list):
@@ -430,8 +410,7 @@ Rules:
             options = q.get("options", [])[:4]
             if len(options) < 4:
                 continue
-            bad = any(_contains_placeholder(o) for o in options)
-            if bad:
+            if any(_contains_placeholder(o) for o in options):
                 continue
             tested_concept = q.get("tested_concept", topic)
             if tested_concept in concepts_used:
@@ -456,6 +435,6 @@ Rules:
             return result
 
     except Exception as e:
-        print(f"   ❌ Fallback LLM also failed: {e}")
+        print(f"   Fallback LLM also failed: {e}")
 
     return []

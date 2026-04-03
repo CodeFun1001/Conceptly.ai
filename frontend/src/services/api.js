@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 
-                (import.meta.env.DEV 
-                  ? 'http://localhost:8000' 
+const API_URL = import.meta.env.VITE_API_URL ||
+                (import.meta.env.DEV
+                  ? 'http://localhost:8000'
                   : window.location.origin + '/api');
 
 console.log('Connecting to API:', API_URL);
@@ -12,7 +12,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 30000 
+  timeout: 30000
 });
 
 api.interceptors.request.use(
@@ -49,6 +49,7 @@ export const authAPI = {
 };
 
 export const sessionAPI = {
+
   create: (data) => api.post('/sessions/', data),
   getAll: () => api.get('/sessions/'),
   getOne: (id) => api.get(`/sessions/${id}`),
@@ -58,7 +59,20 @@ export const sessionAPI = {
   getCheckpointQuestions: (sessionId, checkpointId) => api.get(`/sessions/${sessionId}/checkpoints/${checkpointId}/questions`),
   retryCheckpointQuestions: (sessionId, checkpointId, weakAreas) => api.post(`/sessions/${sessionId}/checkpoints/${checkpointId}/questions/retry`, weakAreas),
   completeCheckpoint: (sessionId, checkpointId) => api.post(`/sessions/${sessionId}/checkpoints/${checkpointId}/complete`),
-  completeSession: (id) => api.post(`/sessions/${id}/complete`)
+  completeSession: (id) => api.post(`/sessions/${id}/complete`),
+
+  uploadNotes: (sessionId, { notesText, file } = {}) => {
+    const formData = new FormData();
+    if (notesText) formData.append('notes_text', notesText);
+    if (file)      formData.append('file', file);
+    return api.post(`/sessions/${sessionId}/notes/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    });
+  },
+
+  updateCheckpoint: (sessionId, checkpointId, data) =>
+    api.put(`/sessions/${sessionId}/checkpoints/${checkpointId}`, data),
 };
 
 export const checkpointAPI = {

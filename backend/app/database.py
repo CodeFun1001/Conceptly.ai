@@ -1,11 +1,12 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from dotenv import load_dotenv
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+load_dotenv()
 
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -19,12 +20,4 @@ def get_db():
 
 def init_db():
     from app.models import Base
-    
-    try:
-        print("Creating/updating database tables...")
-        Base.metadata.create_all(bind=engine)
-        print("Database tables created successfully!")
-        
-    except Exception as e:
-        print(f"Database init error: {e}")
-        raise
+    Base.metadata.create_all(bind=engine)

@@ -17,130 +17,132 @@ class LearningState(TypedDict):
     weak_areas: List[str]
     attempt_number: int
     workflow_complete: bool
+    session_id: Optional[int]
 
 @traceable(name="gather_context_node")
 def gather_context_node(state: LearningState) -> LearningState:
     from app.services import context_gatherer
-    
-    print(f"Gathering context for: {state['checkpoint']['topic']}")
+
+    checkpoint = state["checkpoint"]
+    session_id = state.get("session_id")
+
+    print(f"Gathering context for: {checkpoint['topic']}")
     print(f"Using tutor mode: {state['tutor_mode']}")
+
     
+    try:
+        from app.services.rag_service import ensure_session_knowledge
+        if session_id:
+            ensure_session_knowledge(
+                session_id,
+                checkpoint.get("topic", ""),
+                checkpoint.get("objectives", []),
+                checkpoint.get("key_concepts", []),
+            )
+    except Exception as e:
+        print(f"Knowledge store pre-seed error (non-fatal): {e}")
+
     context = context_gatherer.gather_context(
-        state['checkpoint'],
-        state['tutor_mode']
+        checkpoint,
+        state["tutor_mode"],
+        session_id=session_id,
     )
-    
-    state['context'] = context
-    state['context_validated'] = False
-    
+
+    state["context"]           = context
+    state["context_validated"] = False
+
     print(f"Context gathered: {len(context)} characters")
-    
     return state
 
 @traceable(name="validate_context_node")
 def validate_context_node(state: LearningState) -> LearningState:
     from app.services.context_gatherer import validate_context
-    
-    print(f"Validating context quality...")
-    
-    validation_result = validate_context(
-        state['checkpoint'],
-        state['context']
-    )
-    
-    state['validation_score'] = validation_result['score']
-    state['context_validated'] = validation_result['score'] >= 85
-    
+
+    print("Validating context quality...")
+    validation_result = validate_context(state["checkpoint"], state["context"])
+
+    state["validation_score"]  = validation_result["score"]
+    state["context_validated"] = validation_result["score"] >= 85
+
     print(f"Validation score: {validation_result['score']}/100")
-    if state['context_validated']:
-        print("✓ Context validation passed")
+    if state["context_validated"]:
+        print("Context validation passed")
     else:
-        print("⚠ Context validation failed, will retry")
-    
+        print("Context validation failed, will retry")
+
     return state
 
 @traceable(name="explain_node")
 def explain_node(state: LearningState) -> LearningState:
     from app.services import explainer
-    
-    print(f"Creating explanation for checkpoint...")
-    print(f"Using tutor mode: {state['tutor_mode']}")
-    
+
+    print(f"Creating explanation | tutor_mode={state['tutor_mode']}")
+
     explanation = explainer.explain_checkpoint(
-        state['checkpoint'],
-        state['context'],
-        state['tutor_mode']
+        state["checkpoint"],
+        state["context"],
+        state["tutor_mode"],
+        session_id=state.get("session_id"),
     )
-    
-    state['explanation'] = explanation
-    
+
+    state["explanation"] = explanation
     print(f"Explanation created: {len(explanation)} characters")
-    
     return state
 
 @traceable(name="generate_questions_node")
 def generate_questions_node(state: LearningState) -> LearningState:
     from app.services import question_generator
-    
-    print(f"Generating assessment questions...")
-    print(f"Using tutor mode: {state['tutor_mode']}")
-    print(f"Attempt number: {state.get('attempt_number', 0)}")
-    
+
+    print(f"Generating questions | tutor_mode={state['tutor_mode']} | attempt={state.get('attempt_number', 0)}")
+
     questions = question_generator.generate_questions(
-        state['checkpoint'],
-        state['context'],
-        state['checkpoint'].get('level', 'intermediate'),
-        state['tutor_mode'],
-        state.get('weak_areas', []),
-        state.get('attempt_number', 0)
+        state["checkpoint"],
+        state["context"],
+        state["checkpoint"].get("level", "intermediate"),
+        state["tutor_mode"],
+        state.get("weak_areas", []),
+        state.get("attempt_number", 0),
+        session_id=state.get("session_id"),
     )
-    
-    state['questions'] = questions
-    state['workflow_complete'] = True
-    
-    print(f"✓ Generated {len(questions)} questions")
-    print("✓ Workflow execution completed successfully")
-    
+
+    state["questions"]         = questions
+    state["workflow_complete"] = True
+
+    print(f"Generated {len(questions)} questions")
+    print("Workflow execution completed")
     return state
 
 def should_retry_context(state: LearningState) -> str:
-    if state.get('context_validated', False):
+    if state.get("context_validated", False):
         return "proceed"
-    
-    
-    if state.get('validation_score', 0) == 0:
-        
-        return "retry" if state.get('validation_score', 0) < 85 else "proceed"
-    
-    
+
+    if state.get("validation_score", 0) == 0:
+        return "retry" if state.get("validation_score", 0) < 85 else "proceed"
+
     print("Using current context (retry limit reached or score acceptable)")
-    state['context_validated'] = True
+    state["context_validated"] = True
     return "proceed"
 
 def create_workflow():
-    workflow = StateGraph(LearningState)    
-    
-    workflow.add_node("gather_context", gather_context_node)
-    workflow.add_node("validate_context", validate_context_node)
-    workflow.add_node("explain", explain_node)
-    workflow.add_node("generate_questions", generate_questions_node)
-    
+    workflow = StateGraph(LearningState)
+
+    workflow.add_node("gather_context",    gather_context_node)
+    workflow.add_node("validate_context",  validate_context_node)
+    workflow.add_node("explain",           explain_node)
+    workflow.add_node("generate_questions",generate_questions_node)
+
     workflow.set_entry_point("gather_context")
-    
     workflow.add_edge("gather_context", "validate_context")
-        
+
     workflow.add_conditional_edges(
         "validate_context",
         should_retry_context,
-        {
-            "retry": "gather_context",
-            "proceed": "explain"
-        }
+        {"retry": "gather_context", "proceed": "explain"},
     )
-    
-    workflow.add_edge("explain", "generate_questions")
+
+    workflow.add_edge("explain",            "generate_questions")
     workflow.add_edge("generate_questions", END)
-    
+
     return workflow.compile()
 
 @traceable(name="run_checkpoint_workflow")
@@ -148,65 +150,55 @@ def run_checkpoint_workflow(
     checkpoint: Dict,
     tutor_mode: str,
     weak_areas: List[str] = None,
-    attempt_number: int = 0
+    attempt_number: int = 0,
+    session_id: Optional[int] = None,
 ) -> LearningState:
-    """
-    Run the complete checkpoint learning workflow
-    
-    Args:
-        checkpoint: Checkpoint data dict with id, topic, objectives, etc.
-        tutor_mode: The tutor personality mode to use
-        weak_areas: List of weak areas to focus on (for retries)
-        attempt_number: Which attempt this is (0 for first attempt)
-    
-    Returns:
-        Final workflow state with context, explanation, and questions
-    """
-    
+
     print("=" * 60)
     print(f"Starting checkpoint workflow")
     print(f"Topic: {checkpoint.get('topic')}")
     print(f"Tutor mode: {tutor_mode}")
     print(f"Attempt number: {attempt_number}")
     if weak_areas:
-        print(f"Weak areas to focus on: {weak_areas}")
+        print(f"Weak areas: {weak_areas}")
+    if session_id:
+        print(f"Session ID (Agentic RAG): {session_id}")
     print("=" * 60)
-    
+
     workflow = create_workflow()
-    
-    
+
     initial_state: LearningState = {
-        'checkpoint': checkpoint,
-        'tutor_mode': tutor_mode,
-        'context': '',
-        'explanation': '',
-        'questions': [],
-        'validation_score': 0,
-        'context_validated': False,
-        'weak_areas': weak_areas or [],
-        'attempt_number': attempt_number,
-        'workflow_complete': False
+        "checkpoint":        checkpoint,
+        "tutor_mode":        tutor_mode,
+        "context":           "",
+        "explanation":       "",
+        "questions":         [],
+        "validation_score":  0,
+        "context_validated": False,
+        "weak_areas":        weak_areas or [],
+        "attempt_number":    attempt_number,
+        "workflow_complete": False,
+        "session_id":        session_id,
     }
-    
+
     try:
         result = workflow.invoke(initial_state)
-        
-        if result.get('workflow_complete'):
+
+        if result.get("workflow_complete"):
             print("=" * 60)
-            print("✓ Workflow completed successfully")
-            print(f"✓ Context length: {len(result.get('context', ''))} chars")
-            print(f"✓ Explanation length: {len(result.get('explanation', ''))} chars")
-            print(f"✓ Questions generated: {len(result.get('questions', []))}")
+            print("Workflow completed successfully")
+            print(f"Context length:    {len(result.get('context', ''))} chars")
+            print(f"Explanation length:{len(result.get('explanation', ''))} chars")
+            print(f"Questions:         {len(result.get('questions', []))}")
             print("=" * 60)
         else:
-            print("⚠ Warning: Workflow may not have completed fully")
-        
+            print("Warning: Workflow may not have completed fully")
+
         return result
-        
+
     except Exception as e:
-        print(f"❌ Workflow execution error: {e}")
+        print(f"Workflow execution error: {e}")
         import traceback
         traceback.print_exc()
-        
-        initial_state['workflow_complete'] = False
+        initial_state["workflow_complete"] = False
         return initial_state

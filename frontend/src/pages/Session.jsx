@@ -4,24 +4,34 @@ import { sessionAPI, gamificationAPI } from '../services/api';
 import ProgressBar from '../components/Progressbar';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import NotesUpload    from '../components/NotesUpload';
+import GamePathStepper from './CheckpointStepper';
 
 const Session = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
-  const [checkpoints, setCheckpoints] = useState([]);
-  const [currentCheckpoint, setCurrentCheckpoint] = useState(null);
-  const [contentCache, setContentCache] = useState({});
-  const [displayedText, setDisplayedText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [loadingContent, setLoadingContent] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [canComplete, setCanComplete] = useState(false);
-  const [tutorMode, setTutorMode] = useState('supportive_buddy');
-  const typingRef = useRef(null);
-  const hasLoadedRef = useRef(false);
+  const [session,            setSession]            = useState(null);
+  const [checkpoints,        setCheckpoints]        = useState([]);
+  const [currentCheckpoint,  setCurrentCheckpoint]  = useState(null);
+  const [contentCache,       setContentCache]       = useState({});
+  const [displayedText,      setDisplayedText]      = useState('');
+  const [loading,            setLoading]            = useState(true);
+  const [generating,         setGenerating]         = useState(false);
+  const [loadingContent,     setLoadingContent]     = useState(false);
+  const [isTyping,           setIsTyping]           = useState(false);
+  const [sidebarOpen,        setSidebarOpen]        = useState(false);
+  const [canComplete,        setCanComplete]        = useState(false);
+  const [tutorMode,          setTutorMode]          = useState('supportive_buddy');
+  const [showNotesUpload,    setShowNotesUpload]    = useState(false);
+  const [ragActive,          setRagActive]          = useState(false);
+  const [editingCheckpointId, setEditingCheckpointId] = useState(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [newlyDone, setNewlyDone] = useState([]);
+  const [tab, setTab] = useState('learn');
+  const [quizPassed, setQuizPassed] = useState(false);
+
+  const typingRef     = useRef(null);
+  const hasLoadedRef  = useRef(false);
 
   useEffect(() => {
     if (!hasLoadedRef.current) {
@@ -37,9 +47,7 @@ const Session = () => {
   }, [currentCheckpoint, contentCache]);
 
   useEffect(() => {
-    if (checkpoints.length > 0) {
-      checkCanComplete();
-    }
+    if (checkpoints.length > 0) checkCanComplete();
   }, [checkpoints]);
 
   const typeText = (text) => {
@@ -73,10 +81,14 @@ const Session = () => {
 
       const [sessionRes, checkpointsRes] = await Promise.all([
         sessionAPI.getOne(id),
-        sessionAPI.getCheckpoints(id)
+        sessionAPI.getCheckpoints(id),
       ]);
 
       setSession(sessionRes.data);
+
+      if (sessionRes.data.user_notes && sessionRes.data.user_notes.trim()) {
+        setRagActive(true);
+      }
 
       if (checkpointsRes.data.length === 0) {
         await generateCheckpoints();
@@ -84,9 +96,7 @@ const Session = () => {
         setCheckpoints(checkpointsRes.data);
         const firstPending = checkpointsRes.data.find(cp => cp.status === 'pending');
         const checkpointToLoad = firstPending || checkpointsRes.data[0];
-        if (checkpointToLoad) {
-          await loadCheckpointContent(checkpointToLoad);
-        }
+        if (checkpointToLoad) await loadCheckpointContent(checkpointToLoad);
       }
     } catch (error) {
       console.error('Failed to load session:', error);
@@ -130,14 +140,12 @@ const Session = () => {
   };
 
   const handleStartQuiz = () => {
-    if (currentCheckpoint) {
-      navigate(`/quiz/${id}/${currentCheckpoint.id}`);
-    }
+    if (currentCheckpoint) navigate(`/quiz/${id}/${currentCheckpoint.id}`);
   };
 
   const handleCheckpointClick = (checkpoint) => {
-    const checkpointIndex = checkpoints.findIndex(cp => cp.id === checkpoint.id);
-    const isLocked = checkpointIndex > 0 && checkpoints[checkpointIndex - 1].status !== 'completed';
+    const idx = checkpoints.findIndex(cp => cp.id === checkpoint.id);
+    const isLocked = idx > 0 && checkpoints[idx - 1].status !== 'completed';
     if (!isLocked) {
       loadCheckpointContent(checkpoint);
       setSidebarOpen(false);
@@ -148,7 +156,7 @@ const Session = () => {
     try {
       const [sessionRes, checkpointsRes] = await Promise.all([
         sessionAPI.getOne(id),
-        sessionAPI.getCheckpoints(id)
+        sessionAPI.getCheckpoints(id),
       ]);
       const allCompleted = checkpointsRes.data.every(cp => cp.status === 'completed');
       setCanComplete(allCompleted && sessionRes.data.status !== 'completed');
@@ -160,15 +168,11 @@ const Session = () => {
   const handleCompleteSession = async () => {
     try {
       await sessionAPI.completeSession(id);
-      // Navigate to completion page instead of alert
       navigate(`/completion/${id}`);
     } catch (error) {
       console.error('Failed to complete session:', error);
-      if (error.response?.data?.detail) {
-        alert(error.response.data.detail);
-      } else {
-        alert('Failed to complete session. Please try again.');
-      }
+      if (error.response?.data?.detail) alert(error.response.data.detail);
+      else alert('Failed to complete session. Please try again.');
     }
   };
 
@@ -184,29 +188,27 @@ const Session = () => {
 
   const getTutorModeName = (mode) => {
     const modes = {
-      'chill_friend': '😎 Chill Friend',
-      'strict_mentor': '📚 Strict Mentor',
-      'supportive_buddy': '🤗 Supportive Buddy',
-      'exam_mode': '🎯 Exam Mode'
+      chill_friend:     '😎 Chill Friend',
+      strict_mentor:    '📚 Strict Mentor',
+      supportive_buddy: '🤗 Supportive Buddy',
+      exam_mode:        '🎯 Exam Mode',
     };
     return modes[mode] || mode;
   };
 
   const extractMnemonics = (text) => {
     if (!text) return [];
-    const mnemonicPatterns = [
+    const patterns = [
       /(?:remember|mnemonic|acronym|trick|tip|easy way):\s*([^.!?]+[.!?])/gi,
       /(?:think of it as|imagine|visualize):\s*([^.!?]+[.!?])/gi,
-      /(?:to help you remember|here's a tip):\s*([^.!?]+[.!?])/gi
+      /(?:to help you remember|here's a tip):\s*([^.!?]+[.!?])/gi,
     ];
-    const mnemonics = [];
-    mnemonicPatterns.forEach(pattern => {
-      let match;
-      while ((match = pattern.exec(text)) !== null) {
-        mnemonics.push(match[1].trim());
-      }
+    const out = [];
+    patterns.forEach(p => {
+      let m;
+      while ((m = p.exec(text)) !== null) out.push(m[1].trim());
     });
-    return mnemonics;
+    return out;
   };
 
   const markdownComponents = {
@@ -214,7 +216,7 @@ const Session = () => {
     h2: ({ children }) => <h2 style={{ color: 'var(--primary)', marginTop: '24px', marginBottom: '12px', fontSize: '20px', fontWeight: '700' }}>{children}</h2>,
     h3: ({ children }) => <h3 style={{ color: 'var(--primary)', marginTop: '20px', marginBottom: '10px', fontSize: '17px', fontWeight: '700' }}>{children}</h3>,
     h4: ({ children }) => <h4 style={{ color: 'var(--primary)', marginTop: '16px', marginBottom: '8px', fontSize: '15px', fontWeight: '600' }}>{children}</h4>,
-    p: ({ children }) => <p style={{ marginBottom: '16px', lineHeight: '1.8', color: 'var(--text-primary)' }}>{children}</p>,
+    p:  ({ children }) => <p style={{ marginBottom: '16px', lineHeight: '1.8', color: 'var(--text-primary)' }}>{children}</p>,
     ul: ({ children }) => <ul style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ul>,
     ol: ({ children }) => <ol style={{ marginLeft: '24px', marginBottom: '16px', lineHeight: '1.7' }}>{children}</ol>,
     li: ({ children }) => <li style={{ marginBottom: '6px', color: 'var(--text-primary)' }}>{children}</li>,
@@ -222,6 +224,27 @@ const Session = () => {
     em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
     code: ({ children }) => <code style={{ background: 'var(--surface-elevated)', padding: '2px 6px', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace', color: 'var(--primary)' }}>{children}</code>,
     blockquote: ({ children }) => <blockquote style={{ borderLeft: '4px solid var(--primary)', paddingLeft: '16px', margin: '16px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{children}</blockquote>,
+  };
+
+  const handleNotesUploaded = (data) => {
+    if (data.rag_active) setRagActive(true);
+    setTimeout(() => setShowNotesUpload(false), 2500);
+  };
+
+  const handleCheckpointSaved = (updated) => {
+    setCheckpoints(prev =>
+      prev.map(cp => cp.id === updated.id ? { ...cp, ...updated } : cp)
+    );
+    setContentCache(prev => {
+      const next = { ...prev };
+      delete next[updated.id];
+      return next;
+    });
+    setEditingCheckpointId(null);
+    if (currentCheckpoint?.id === updated.id) {
+      setCurrentCheckpoint(cp => ({ ...cp, ...updated }));
+      setDisplayedText('');
+    }
   };
 
   if (loading) {
@@ -242,7 +265,7 @@ const Session = () => {
           <div className="loading-spinner" style={{ margin: '0 auto 20px' }}></div>
           <h3>Generating Your Learning Path...</h3>
           <p style={{ color: 'var(--text-secondary)', marginTop: '12px' }}>
-            This may take a moment. We're creating personalized checkpoints for you!
+            {ragActive ? '🧠 Using your notes to personalise checkpoints…' : 'This may take a moment. We\'re creating personalised checkpoints for you!'}
           </p>
         </div>
       </div>
@@ -260,96 +283,121 @@ const Session = () => {
   }
 
   const currentContent = currentCheckpoint ? contentCache[currentCheckpoint.id] : null;
-  const mnemonics = currentContent ? extractMnemonics(currentContent.explanation) : [];
+  const mnemonics      = currentContent ? extractMnemonics(currentContent.explanation) : [];
   const completedCount = checkpoints.filter(cp => cp.status === 'completed').length;
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+
+      {showNotesUpload && (
+        <NotesUpload
+          sessionId={parseInt(id)}
+          onClose={() => setShowNotesUpload(false)}
+          onSuccess={handleNotesUploaded}
+        />
+      )}
+
       <div style={{ position: 'relative' }}>
-        {/* Hamburger toggle */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           style={{
-            position: 'fixed',
-            top: '20px',
-            left: '20px',
-            zIndex: 1001,
-            background: 'var(--primary)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '50%',
-            width: '48px',
-            height: '48px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            fontSize: '24px',
-            transition: 'all 0.3s ease'
+            position: 'fixed', top: '20px', left: '20px', zIndex: 1001,
+            background: 'var(--primary)', color: 'white', border: 'none',
+            borderRadius: '50%', width: '48px', height: '48px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            fontSize: '24px', transition: 'all 0.3s ease',
           }}
         >
           {sidebarOpen ? '✕' : '☰'}
         </button>
 
-        {/* Backdrop */}
         {sidebarOpen && (
           <div
             style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0, 0, 0, 0.5)', zIndex: 999,
-              backdropFilter: 'blur(2px)'
+              background: 'rgba(0,0,0,0.5)', zIndex: 999, backdropFilter: 'blur(2px)',
             }}
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* Header */}
         <div className="card card-elevated" style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white', marginBottom: '24px', border: 'none'
+          color: 'white', marginBottom: '24px', border: 'none',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h1 style={{ margin: '0 0 8px 0' }}>{session.topic}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h1 style={{ margin: '0 0 8px 0' }}>{session.topic}</h1>
+                {/* NEW: RAG badge */}
+                {ragActive && (
+                  <span style={{
+                    padding: '3px 10px', borderRadius: '20px', fontSize: '12px',
+                    background: 'rgba(255,255,255,0.25)', fontWeight: '700',
+                    border: '1px solid rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+                  }}>
+                    🧠 RAG Active
+                  </span>
+                )}
+              </div>
               <p style={{ margin: 0, opacity: 0.9 }}>
                 Checkpoint {currentCheckpoint?.checkpoint_index + 1 || 1} of {checkpoints.length}
               </p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>Tutor Mode</div>
-              <select
-                value={tutorMode}
-                onChange={(e) => changeTutorMode(e.target.value)}
-                style={{
-                  padding: '6px 12px', borderRadius: '8px',
-                  border: '2px solid rgba(255,255,255,0.8)',
-                  background: 'rgba(255,255,255,0.25)', color: 'white',
-                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
-                  WebkitAppearance: 'none', appearance: 'none'
-                }}
-              >
-                <option value="chill_friend" style={{ background: '#4F46E5', color: 'white' }}>😎 Chill Friend</option>
-                <option value="strict_mentor" style={{ background: '#4F46E5', color: 'white' }}>📚 Strict Mentor</option>
-                <option value="supportive_buddy" style={{ background: '#4F46E5', color: 'white' }}>🤗 Supportive Buddy</option>
-                <option value="exam_mode" style={{ background: '#4F46E5', color: 'white' }}>🎯 Exam Mode</option>
-              </select>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {session.status !== 'completed' && (
+                <button
+                  onClick={() => setShowNotesUpload(true)}
+                  style={{
+                    padding: '8px 16px', borderRadius: '10px',
+                    border: '2px solid rgba(255,255,255,0.7)',
+                    background: ragActive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
+                    color: 'white', fontWeight: '700', fontSize: '13px',
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {ragActive ? '🧠 Update Notes' : '📤 Upload Notes'}
+                </button>
+              )}
+
+              {/* Tutor mode select (unchanged) */}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>Tutor Mode</div>
+                <select
+                  value={tutorMode}
+                  onChange={(e) => changeTutorMode(e.target.value)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '8px',
+                    border: '2px solid rgba(255,255,255,0.8)',
+                    background: 'rgba(255,255,255,0.25)', color: 'white',
+                    fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                    WebkitAppearance: 'none', appearance: 'none',
+                  }}
+                >
+                  <option value="chill_friend"     style={{ background: '#4F46E5', color: 'white' }}>😎 Chill Friend</option>
+                  <option value="strict_mentor"    style={{ background: '#4F46E5', color: 'white' }}>📚 Strict Mentor</option>
+                  <option value="supportive_buddy" style={{ background: '#4F46E5', color: 'white' }}>🤗 Supportive Buddy</option>
+                  <option value="exam_mode"        style={{ background: '#4F46E5', color: 'white' }}>🎯 Exam Mode</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
 
         <ProgressBar current={completedCount} total={checkpoints.length} label="Overall Progress" />
 
-        {/* Completion banner */}
+        {/* Completion banner (unchanged) */}
         {canComplete && (
           <div className="card" style={{
             marginTop: '24px', marginBottom: '24px',
             background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-            color: 'white', textAlign: 'center', border: 'none'
+            color: 'white', textAlign: 'center', border: 'none',
           }}>
             <h3 style={{ margin: '0 0 12px 0' }}>🎉 All Checkpoints Completed!</h3>
             <p style={{ margin: '0 0 16px 0', opacity: 0.9 }}>
-              Congratulations! You've mastered all the checkpoints. Complete your session to earn bonus XP!
+              Congratulations! Complete your session to earn bonus XP!
             </p>
             <button
               onClick={handleCompleteSession}
@@ -361,97 +409,40 @@ const Session = () => {
           </div>
         )}
 
-        {/* Sidebar */}
         <div
           className="checkpoint-sidebar"
           style={{
             position: 'fixed', left: sidebarOpen ? '0' : '-300px',
-            top: '0', bottom: '0', width: '280px',
+            top: '0', bottom: '0', width: '300px',
             background: 'var(--surface)',
             boxShadow: sidebarOpen ? '4px 0 12px rgba(0,0,0,0.1)' : 'none',
             zIndex: 1000, transition: 'left 0.3s ease',
-            overflowY: 'auto', padding: '80px 20px 20px 20px'
+            overflowY: 'auto', padding: '80px 16px 20px 16px',
           }}
         >
-          <div className="card">
-            <h3 style={{ marginBottom: '16px', color: 'var(--primary)' }}>📚 Checkpoints</h3>
-            <ul className="checkpoint-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {checkpoints.map((cp, idx) => {
-                const isLocked = idx > 0 && checkpoints[idx - 1].status !== 'completed';
-                const isCached = !!contentCache[cp.id];
-                return (
-                  <li
-                    key={cp.id}
-                    className={`checkpoint-item ${cp.status === 'completed' ? 'completed' : ''} ${currentCheckpoint?.id === cp.id ? 'current' : ''} ${isLocked ? 'locked' : ''}`}
-                    onClick={() => handleCheckpointClick(cp)}
-                    style={{
-                      cursor: isLocked ? 'not-allowed' : 'pointer',
-                      padding: '12px', marginBottom: '8px',
-                      borderRadius: 'var(--radius)',
-                      background: currentCheckpoint?.id === cp.id ? 'var(--surface-elevated)' : 'transparent',
-                      border: currentCheckpoint?.id === cp.id ? '2px solid var(--primary)' : '2px solid transparent',
-                      transition: 'all 0.2s ease',
-                      pointerEvents: isLocked ? 'none' : 'auto'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: '600', flex: 1 }}>
-                        {cp.status === 'completed' && '✓ '}
-                        {isLocked && '🔒 '}
-                        {isCached && !isLocked && cp.status !== 'completed' && '📖 '}
-                        {idx + 1}. {cp.topic.substring(0, 25)}{cp.topic.length > 25 && '...'}
-                      </span>
-                      {cp.understanding_score && (
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          {Math.round(cp.understanding_score * 100)}%
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/* Completion page button in sidebar */}
-            {canComplete && (
-              <button
-                onClick={() => { setSidebarOpen(false); handleCompleteSession(); }}
-                style={{
-                  width: '100%', marginTop: '16px', padding: '14px',
-                  background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-                  color: 'white', border: 'none', borderRadius: 'var(--radius)',
-                  fontWeight: '700', fontSize: '15px', cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(17,153,142,0.3)'
-                }}
-              >
-                🏆 View Completion Page
-              </button>
-            )}
-
-            {/* If session already completed, show link */}
-            {session?.status === 'completed' && (
-              <button
-                onClick={() => { setSidebarOpen(false); navigate(`/completion/${id}`); }}
-                style={{
-                  width: '100%', marginTop: '16px', padding: '14px',
-                  background: 'linear-gradient(135deg, #4392F1 0%, #6BA3F5 100%)',
-                  color: 'white', border: 'none', borderRadius: 'var(--radius)',
-                  fontWeight: '700', fontSize: '15px', cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(67,146,241,0.3)'
-                }}
-              >
-                🎉 View Completion Page
-              </button>
-            )}
+          <div className="card p-5 h-fit lg:sticky lg:top-6">
+            <div className="text-[10px] tracking-widest uppercase text-muted mb-4">Learning Path</div>
+            <GamePathStepper
+              checkpoints={checkpoints}
+              activeIdx={activeIdx}
+              newlyDone={newlyDone}
+              onSelect={i => {
+                setActiveIdx(i)
+                setTab('learn')
+                setQuizPassed(false)
+              }}
+            />
           </div>
         </div>
 
-        {/* Main content */}
+        {/* ── Main content (unchanged) ────────────────────────────────────── */}
         <div style={{ marginLeft: '0', marginTop: '24px' }}>
           {loadingContent && (
             <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
               <div className="loading-spinner" style={{ margin: '0 auto 20px' }}></div>
-              <p style={{ color: 'var(--text-secondary)' }}>Loading content...</p>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                {ragActive ? '🧠 Generating personalised content from your notes…' : 'Loading content…'}
+              </p>
             </div>
           )}
 
@@ -470,7 +461,7 @@ const Session = () => {
                 <div style={{
                   background: 'var(--surface-elevated)', padding: '20px',
                   borderRadius: 'var(--radius)', marginBottom: '24px',
-                  border: '2px solid var(--border)'
+                  border: '2px solid var(--border)',
                 }}>
                   <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>🎯 Learning Objectives:</h4>
                   <ul style={{ marginLeft: '20px' }}>
@@ -492,7 +483,7 @@ const Session = () => {
                   <div className="mnemonic-card" style={{
                     marginTop: '24px', padding: '16px',
                     background: 'var(--surface-elevated)', borderRadius: 'var(--radius)',
-                    border: '2px solid var(--primary)'
+                    border: '2px solid var(--primary)',
                   }}>
                     <h4 style={{ marginBottom: '12px', color: 'var(--primary)' }}>💡 Memory Aids & Tips</h4>
                     {mnemonics.map((mnemonic, idx) => (
@@ -509,11 +500,11 @@ const Session = () => {
                   style={{ fontSize: '16px', padding: '14px 32px' }}
                   disabled={isTyping || loadingContent}
                 >
-                  {isTyping ? 'Please wait...' : '✅ Ready for Quiz'}
+                  {isTyping ? 'Please wait…' : '✅ Ready for Quiz'}
                 </button>
                 {isTyping && (
                   <p style={{ marginTop: '12px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                    Reading the lesson...
+                    Reading the lesson…
                   </p>
                 )}
               </div>
